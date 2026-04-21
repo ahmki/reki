@@ -8,6 +8,9 @@ defmodule Reki.Packages.Package do
     field :title, :string
     field :latest, :string
     field :description, :string
+    field :dist_tags, :map, default: %{}
+
+    has_many :versions, Reki.PackageVersions
 
     timestamps(type: :utc_datetime)
   end
@@ -15,7 +18,7 @@ defmodule Reki.Packages.Package do
   @doc false
   def changeset(package, attrs) do
     package
-    |> cast(attrs, [:title])
+    |> cast(attrs, [:title, :latest, :description, :dist_tags])
     |> validate_required([:title])
     |> unique_constraint(:title)
   end

@@ -5,11 +5,12 @@ defmodule Reki.Packages.PackageVersion do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "package_versions" do
-    field :package_id
-    field :version, :string, null: false
-    field :manifest, :map, null: false
+    field :version, :string
+    field :manifest, :map
     field :tarball_url, :string
     field :tarball_size, :integer
+    field :shasum, :integer
+    field :integrity, :integer
     field :validation_results, :map, default: %{}
 
     field :validation_status, Ecto.Enum,

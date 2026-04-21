@@ -7,6 +7,8 @@ defmodule Reki.Repo.Migrations.CreatePackageVersions do
       add :package_id, references(:packages, type: :binary_id, on_delete: :delete_all), null: false
       add :version, :string, null: false
       add :manifest, :map, null: false
+      add :shasum, :string
+      add :integrity, :string
       add :tarball_url, :string
       add :tarball_size, :integer
       add :validation_status, :string, default: "pending", null: false

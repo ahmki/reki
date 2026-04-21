@@ -7,6 +7,7 @@ defmodule Reki.Repo.Migrations.CreatePackages do
       add :title, :string, null: false
       add :latest, :string
       add :description, :text
+      add :dist_tags, :map, default: %{}
 
       timestamps(type: :utc_datetime)
     end

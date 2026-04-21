@@ -1,104 +1,148 @@
 defmodule Reki.Packages do
-  @moduledoc """
-  The Packages context.
-  """
-
-  import Ecto.Query, warn: false
+  import Ecto.Query
   alias Reki.Repo
+  alias Reki.Packages.{Package, PackageVersion}
 
-  alias Reki.Packages.Package
+  # ── Fetch ──────────────────────────────────────────────────────────────────
 
-  @doc """
-  Returns the list of packages.
-
-  ## Examples
-
-      iex> list_packages()
-      [%Package{}, ...]
-
-  """
-  def list_packages do
-    Repo.all(Package)
+  def get_packument(title) do
+    case get_package(title) do
+      nil -> {:error, :not_found}
+      pkg -> {:ok, build_packument(pkg)}
+    end
   end
 
-  @doc """
-  Gets a single package.
+  def get_version(title, version) do
+    result =
+      Repo.one(
+        from v in PackageVersion,
+          join: p in assoc(v, :package),
+          where: p.title == ^title and v.version == ^version
+      )
 
-  Raises `Ecto.NoResultsError` if the Package does not exist.
+    case result do
+      nil -> {:error, :not_found}
+      v -> {:ok, build_version_manifest(v)}
+    end
+  end
 
-  ## Examples
+  # ── Publish ────────────────────────────────────────────────────────────────
 
-      iex> get_package!(123)
-      %Package{}
+  def publish(title, body) do
+    with {:ok, version, manifest, tarball} <- extract_publish_payload(title, body),
+         {:ok, url, shasum, integrity, size} <- store_tarball(title, version, tarball),
+         {:ok, pkg} <- upsert_package(title, version, manifest),
+         {:ok, vsn} <- insert_version(pkg.id, version, manifest, url, shasum, integrity, size) do
+      {:ok, vsn}
+    end
+  end
 
-      iex> get_package!(456)
-      ** (Ecto.NoResultsError)
+  # ── Packument builder ──────────────────────────────────────────────────────
 
-  """
-  def get_package!(id), do: Repo.get!(Package, id)
+  defp build_packument(%Package{} = pkg) do
+    approved_versions =
+      pkg.versions
+      |> Enum.filter(&(&1.validation_status == :approved))
+      |> Map.new(&{&1.version, build_version_manifest(&1)})
 
-  @doc """
-  Creates a package.
+    %{
+      "_id" => pkg.title,
+      "title" => pkg.title,
+      "description" => pkg.description,
+      "dist-tags" => pkg.dist_tags,
+      "versions" => approved_versions,
+      "time" => build_time_map(pkg.versions)
+    }
+  end
 
-  ## Examples
+  defp build_version_manifest(%PackageVersion{} = v) do
+    Map.merge(v.manifest, %{
+      "dist" => %{
+        "tarball" => v.tarball_url,
+        "shasum" => v.shasum,
+        "integrity" => v.integrity,
+        "fileCount" => v.tarball_size
+      }
+    })
+  end
 
-      iex> create_package(%{field: value})
-      {:ok, %Package{}}
+  defp build_time_map(versions) do
+    Map.new(versions, fn v ->
+      {v.version, DateTime.to_iso8601(v.inserted_at)}
+    end)
+  end
 
-      iex> create_package(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
+  # ── Publish helpers ────────────────────────────────────────────────────────
 
-  """
-  def create_package(attrs) do
-    %Package{}
-    |> Package.changeset(attrs)
+  defp extract_publish_payload(title, body) do
+    version = get_in(body, ["dist-tags", "latest"])
+    manifest = get_in(body, ["versions", version])
+    attachment_key = "#{title}-#{version}.tgz"
+    tarball_b64 = get_in(body, ["_attachments", attachment_key, "data"])
+
+    with false <- is_nil(version),
+         false <- is_nil(manifest),
+         false <- is_nil(tarball_b64),
+         {:ok, tarball} <- Base.decode64(tarball_b64) do
+      {:ok, version, manifest, tarball}
+    else
+      true -> {:error, :invalid_payload}
+      :error -> {:error, :invalid_tarball_encoding}
+    end
+  end
+
+  defp upsert_package(title, version, manifest) do
+    Repo.insert(
+      %Package{
+        title: title,
+        latest: version,
+        description: manifest["description"],
+        dist_tags: %{"latest" => version}
+      },
+      on_conflict: [set: [latest: version, dist_tags: %{"latest" => version}]],
+      conflict_target: :title,
+      returning: true
+    )
+  end
+
+  defp insert_version(package_id, version, manifest, url, shasum, integrity, size) do
+    %PackageVersion{}
+    |> PackageVersion.changeset(%{
+      package_id: package_id,
+      version: version,
+      manifest: manifest,
+      tarball_url: url,
+      shasum: shasum,
+      integrity: integrity,
+      tarball_size: size,
+      validation_status: :pending
+    })
     |> Repo.insert()
   end
 
-  @doc """
-  Updates a package.
+  defp store_tarball(title, version, tarball) do
+    shasum = :crypto.hash(:sha, tarball) |> Base.encode16(case: :lower)
 
-  ## Examples
+    integrity =
+      :crypto.hash(:sha512, tarball)
+      |> Base.encode64()
+      |> then(&"sha512-#{&1}")
 
-      iex> update_package(package, %{field: new_value})
-      {:ok, %Package{}}
+    size = byte_size(tarball)
 
-      iex> update_package(package, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def update_package(%Package{} = package, attrs) do
-    package
-    |> Package.changeset(attrs)
-    |> Repo.update()
+    case Reki.Storage.put(tarball_key(title, version), tarball) do
+      {:ok, url} -> {:ok, url, shasum, integrity, size}
+      error -> error
+    end
   end
 
-  @doc """
-  Deletes a package.
-
-  ## Examples
-
-      iex> delete_package(package)
-      {:ok, %Package{}}
-
-      iex> delete_package(package)
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def delete_package(%Package{} = package) do
-    Repo.delete(package)
+  defp get_package(title) do
+    Repo.one(
+      from p in Package,
+        where: p.title == ^title,
+        preload: :versions
+    )
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for tracking package changes.
-
-  ## Examples
-
-      iex> change_package(package)
-      %Ecto.Changeset{data: %Package{}}
-
-  """
-  def change_package(%Package{} = package, attrs \\ %{}) do
-    Package.changeset(package, attrs)
-  end
+  defp tarball_key(title, version), do: "#{title}/-/#{title}-#{version}.tgz"
 end
