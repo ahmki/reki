@@ -18,7 +18,12 @@ defmodule RekiWeb.Router do
   scope "/api", RekiWeb do
     pipe_through :api
 
-    resources "/packages", PackageController
+    get "/-/ping", PackageController, :ping
+    get "/:name", PackageController, :show
+    get "/:name/:version", PackageController, :show_version
+    get "/:name/-/:filename", PackageController, :download_tarball
+
+    put "/:name", PackageController, :publish
   end
 
   scope "/", RekiWeb do
