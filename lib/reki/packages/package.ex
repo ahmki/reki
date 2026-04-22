@@ -5,7 +5,7 @@ defmodule Reki.Packages.Package do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
   schema "packages" do
-    field :title, :string
+    field :name, :string
     field :latest, :string
     field :description, :string
     field :dist_tags, :map, default: %{}
@@ -18,8 +18,8 @@ defmodule Reki.Packages.Package do
   @doc false
   def changeset(package, attrs) do
     package
-    |> cast(attrs, [:title, :latest, :description, :dist_tags])
-    |> validate_required([:title])
-    |> unique_constraint(:title)
+    |> cast(attrs, [:name, :latest, :description, :dist_tags])
+    |> validate_required([:name])
+    |> unique_constraint(:name)
   end
 end

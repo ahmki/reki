@@ -12,7 +12,7 @@ defmodule Reki.PackagesFixtures do
   """
   def package_fixture(attrs \\ %{}) do
     attrs
-    |> Enum.into(%{title: "some title"})
+    |> Enum.into(%{name: "some package"})
     |> then(&Package.changeset(%Package{}, &1))
     |> Repo.insert!()
   end

@@ -14,12 +14,12 @@ defmodule Reki.PackagesTest do
 
   describe "publish/2" do
     test "persists integrity data and hides pending versions from installs" do
-      title = "widget"
+      name = "widget"
       version = "1.0.0"
       tarball = "package-tarball"
 
       assert {:ok, %PackageVersion{} = package_version} =
-               Packages.publish(title, publish_payload(title, version, tarball))
+               Packages.publish(name, publish_payload(name, version, tarball))
 
       assert package_version.validation_status == :pending
       assert package_version.shasum == sha1(tarball)
@@ -29,43 +29,43 @@ defmodule Reki.PackagesTest do
       assert persisted.shasum == sha1(tarball)
       assert persisted.integrity == sha512(tarball)
 
-      assert {:error, :not_found} = Packages.get_version(title, version)
+      assert {:error, :not_found} = Packages.get_version(name, version)
 
-      assert {:ok, packument} = Packages.get_packument(title)
+      assert {:ok, packument} = Packages.get_packument(name)
       assert packument["versions"] == %{}
     end
 
     test "approved versions are installable and tarballs remain protected by approval" do
-      title = "@scope/widget"
+      name = "@scope/widget"
       version = "1.0.0"
       tarball = "approved-tarball"
 
       assert {:ok, %PackageVersion{}} =
-               Packages.publish(title, publish_payload(title, version, tarball))
+               Packages.publish(name, publish_payload(name, version, tarball))
 
-      assert {:error, :not_found} = Packages.get_tarball(title, "widget-1.0.0.tgz")
+      assert {:error, :not_found} = Packages.get_tarball(name, "widget-1.0.0.tgz")
 
-      approve_version(title, version)
+      approve_version(name, version)
 
-      assert {:ok, manifest} = Packages.get_version(title, version)
-      assert manifest["name"] == title
+      assert {:ok, manifest} = Packages.get_version(name, version)
+      assert manifest["name"] == name
       assert manifest["version"] == version
       assert manifest["dist"]["shasum"] == sha1(tarball)
       assert manifest["dist"]["integrity"] == sha512(tarball)
 
-      assert {:ok, downloaded} = Packages.get_tarball(title, "widget-1.0.0.tgz")
+      assert {:ok, downloaded} = Packages.get_tarball(name, "widget-1.0.0.tgz")
       assert downloaded == tarball
     end
   end
 
-  defp publish_payload(title, version, tarball) do
-    filename = tarball_filename(title, version)
+  defp publish_payload(name, version, tarball) do
+    filename = tarball_filename(name, version)
 
     %{
       "dist-tags" => %{"latest" => version},
       "versions" => %{
         version => %{
-          "name" => title,
+          "name" => name,
           "version" => version,
           "description" => "Test package"
         }
@@ -78,16 +78,16 @@ defmodule Reki.PackagesTest do
     }
   end
 
-  defp approve_version(title, version) do
+  defp approve_version(name, version) do
     from(v in PackageVersion,
       join: p in assoc(v, :package),
-      where: p.title == ^title and v.version == ^version
+      where: p.name == ^name and v.version == ^version
     )
     |> Repo.update_all(set: [validation_status: :approved])
   end
 
-  defp tarball_filename(title, version) do
-    "#{title |> String.split("/") |> List.last()}-#{version}.tgz"
+  defp tarball_filename(name, version) do
+    "#{name |> String.split("/") |> List.last()}-#{version}.tgz"
   end
 
   defp storage_root do

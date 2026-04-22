@@ -18,7 +18,7 @@ defmodule RekiWeb.PackageJSON do
   defp data(%Package{} = package) do
     %{
       id: package.id,
-      title: package.title
+      name: package.name
     }
   end
 end

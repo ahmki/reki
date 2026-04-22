@@ -14,22 +14,22 @@ defmodule RekiWeb.PackageControllerTest do
 
   describe "publish and install endpoints" do
     test "pending releases cannot be installed until approved", %{conn: conn} do
-      title = "widget"
+      name = "widget"
       version = "1.0.0"
       tarball = "controller-tarball"
 
-      conn = put(conn, ~p"/api/#{title}", publish_payload(title, version, tarball))
+      conn = put(conn, ~p"/api/#{name}", publish_payload(name, version, tarball))
       assert %{"ok" => true, "id" => "widget@1.0.0"} = json_response(conn, 201)
 
-      conn = get(build_conn(), ~p"/api/#{title}/#{version}")
+      conn = get(build_conn(), ~p"/api/#{name}/#{version}")
       assert %{"error" => "Not found: widget@1.0.0"} = json_response(conn, 404)
 
-      conn = get(build_conn(), ~p"/api/#{title}/-/widget-1.0.0.tgz")
+      conn = get(build_conn(), ~p"/api/#{name}/-/widget-1.0.0.tgz")
       assert %{"error" => "Not found: widget-1.0.0.tgz"} = json_response(conn, 404)
 
-      approve_version(title, version)
+      approve_version(name, version)
 
-      conn = get(build_conn(), ~p"/api/#{title}/#{version}")
+      conn = get(build_conn(), ~p"/api/#{name}/#{version}")
 
       assert %{
                "name" => "widget",
@@ -44,7 +44,7 @@ defmodule RekiWeb.PackageControllerTest do
       assert shasum == sha1(tarball)
       assert integrity == sha512(tarball)
 
-      conn = get(build_conn(), ~p"/api/#{title}/-/widget-1.0.0.tgz")
+      conn = get(build_conn(), ~p"/api/#{name}/-/widget-1.0.0.tgz")
       assert response(conn, 200) == tarball
     end
 
@@ -60,14 +60,14 @@ defmodule RekiWeb.PackageControllerTest do
     end
   end
 
-  defp publish_payload(title, version, tarball) do
-    filename = "#{title |> String.split("/") |> List.last()}-#{version}.tgz"
+  defp publish_payload(name, version, tarball) do
+    filename = "#{name |> String.split("/") |> List.last()}-#{version}.tgz"
 
     %{
       "dist-tags" => %{"latest" => version},
       "versions" => %{
         version => %{
-          "name" => title,
+          "name" => name,
           "version" => version,
           "description" => "Controller test package"
         }
@@ -80,10 +80,10 @@ defmodule RekiWeb.PackageControllerTest do
     }
   end
 
-  defp approve_version(title, version) do
+  defp approve_version(name, version) do
     from(v in PackageVersion,
       join: p in assoc(v, :package),
-      where: p.title == ^title and v.version == ^version
+      where: p.name == ^name and v.version == ^version
     )
     |> Repo.update_all(set: [validation_status: :approved])
   end
