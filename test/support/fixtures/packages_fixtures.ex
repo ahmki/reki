@@ -4,17 +4,16 @@ defmodule Reki.PackagesFixtures do
   entities via the `Reki.Packages` context.
   """
 
+  alias Reki.Packages.Package
+  alias Reki.Repo
+
   @doc """
   Generate a package.
   """
   def package_fixture(attrs \\ %{}) do
-    {:ok, package} =
-      attrs
-      |> Enum.into(%{
-        title: "some title"
-      })
-      |> Reki.Packages.create_package()
-
-    package
+    attrs
+    |> Enum.into(%{title: "some title"})
+    |> then(&Package.changeset(%Package{}, &1))
+    |> Repo.insert!()
   end
 end

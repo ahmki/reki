@@ -11,6 +11,8 @@ config :reki,
   ecto_repos: [Reki.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]
 
+config :reki, Reki.Storage, root: Path.expand("../tmp/storage", __DIR__)
+
 # Configures the endpoint
 config :reki, RekiWeb.Endpoint,
   url: [host: "localhost"],
