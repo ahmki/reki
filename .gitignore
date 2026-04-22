@@ -35,3 +35,4 @@ reki-*.tar
 npm-debug.log
 /assets/node_modules/
 
+/fixtures/npm/widget-test/*.tgz
