@@ -1,13 +1,15 @@
 defmodule RekiWeb.PackageControllerTest do
   use RekiWeb.ConnCase
+  use Oban.Testing, repo: Reki.Repo
 
   import Ecto.Query
+  import Reki.PackagesFixtures
 
-  alias Reki.Packages.PackageVersion
-  alias Reki.Repo
+  alias Reki.PackageApproval.Worker
 
   setup %{conn: conn} do
     File.rm_rf!(storage_root())
+    put_package_approval_steps([])
 
     {:ok, conn: put_req_header(conn, "accept", "application/json")}
   end
@@ -16,9 +18,27 @@ defmodule RekiWeb.PackageControllerTest do
     test "pending releases cannot be installed until approved", %{conn: conn} do
       name = "widget"
       version = "1.0.0"
-      tarball = "controller-tarball"
 
-      conn = put(conn, ~p"/api/#{name}", publish_payload(name, version, tarball))
+      tarball =
+        package_tarball(%{"package/package.json" => ~s({"name":"widget","version":"1.0.0"})})
+
+      put_package_approval_steps([
+        %{
+          name: "package-json-check",
+          command: "elixir",
+          args: ["-e", "File.read!(\"package.json\") |> IO.write()"],
+          timeout: 5_000,
+          blocking: true
+        }
+      ])
+
+      conn =
+        put(
+          conn,
+          ~p"/api/#{name}",
+          publish_payload(name, version, tarball)
+        )
+
       assert %{"ok" => true, "id" => "widget@1.0.0"} = json_response(conn, 201)
 
       conn = get(build_conn(), ~p"/api/#{name}/#{version}")
@@ -27,7 +47,10 @@ defmodule RekiWeb.PackageControllerTest do
       conn = get(build_conn(), ~p"/api/#{name}/-/widget-1.0.0.tgz")
       assert %{"error" => "Not found: widget-1.0.0.tgz"} = json_response(conn, 404)
 
-      approve_version(name, version)
+      assert :ok =
+               perform_job(Worker, %{
+                 "package_version_id" => published_package_version_id(name, version)
+               })
 
       conn = get(build_conn(), ~p"/api/#{name}/#{version}")
 
@@ -53,44 +76,31 @@ defmodule RekiWeb.PackageControllerTest do
         put(
           conn,
           ~p"/api/widget",
-          publish_payload("other-package", "1.0.0", "tarball")
+          publish_payload("other-package", "1.0.0")
         )
 
       assert %{"error" => "Invalid publish payload"} = json_response(conn, 400)
     end
   end
 
-  defp publish_payload(name, version, tarball) do
-    filename = "#{name |> String.split("/") |> List.last()}-#{version}.tgz"
-
-    %{
-      "dist-tags" => %{"latest" => version},
-      "versions" => %{
-        version => %{
-          "name" => name,
-          "version" => version,
-          "description" => "Controller test package"
-        }
-      },
-      "_attachments" => %{
-        filename => %{
-          "data" => Base.encode64(tarball)
-        }
-      }
-    }
-  end
-
-  defp approve_version(name, version) do
-    from(v in PackageVersion,
-      join: p in assoc(v, :package),
-      where: p.name == ^name and v.version == ^version
-    )
-    |> Repo.update_all(set: [validation_status: :approved])
-  end
-
   defp storage_root do
     Application.fetch_env!(:reki, Reki.Storage)
     |> Keyword.fetch!(:root)
+  end
+
+  defp published_package_version_id(name, version) do
+    Reki.Repo.one!(
+      from v in Reki.Packages.PackageVersion,
+        join: p in assoc(v, :package),
+        where: p.name == ^name and v.version == ^version,
+        select: v.id
+    )
+  end
+
+  defp put_package_approval_steps(steps) do
+    previous = Application.get_env(:reki, :package_approval_steps, [])
+    Application.put_env(:reki, :package_approval_steps, steps)
+    on_exit(fn -> Application.put_env(:reki, :package_approval_steps, previous) end)
   end
 
   defp sha1(data) do

@@ -37,3 +37,9 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 config :reki, Reki.Storage, root: Path.expand("../tmp/test/storage", __DIR__)
+
+config :reki, Oban,
+  repo: Reki.Repo,
+  queues: false,
+  plugins: false,
+  testing: :manual

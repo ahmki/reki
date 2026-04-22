@@ -10,6 +10,7 @@ defmodule Reki.Application do
     children = [
       RekiWeb.Telemetry,
       Reki.Repo,
+      {Oban, Application.fetch_env!(:reki, Oban)},
       {DNSCluster, query: Application.get_env(:reki, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Reki.PubSub},
       # Start a worker by calling: Reki.Worker.start_link(arg)

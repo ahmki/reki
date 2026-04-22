@@ -18,6 +18,7 @@ defmodule Reki.Packages.PackageVersion do
       default: :pending
 
     belongs_to :package, Reki.Packages.Package
+    has_many :approval_runs, Reki.PackageApproval.ApprovalRun
 
     timestamps(type: :utc_datetime)
   end

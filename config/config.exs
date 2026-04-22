@@ -13,6 +13,17 @@ config :reki,
 
 config :reki, Reki.Storage, root: Path.expand("../tmp/storage", __DIR__)
 
+config :reki, :package_approval_steps, []
+
+config :reki,
+       :package_approval_executor,
+       Reki.PackageApproval.Executor
+
+config :reki, Oban,
+  repo: Reki.Repo,
+  queues: [package_approval: 10],
+  plugins: [Oban.Plugins.Pruner]
+
 # Configures the endpoint
 config :reki, RekiWeb.Endpoint,
   url: [host: "localhost"],
