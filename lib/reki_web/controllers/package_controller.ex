@@ -35,9 +35,7 @@ defmodule RekiWeb.PackageController do
   end
 
   def download_tarball(conn, %{"name" => name, "filename" => filename}) do
-    key = "#{URI.decode(name)}/-/#{filename}"
-
-    case Reki.Storage.get(key) do
+    case Packages.get_tarball(URI.decode(name), filename) do
       {:ok, data} ->
         conn
         |> put_resp_header("content-disposition", ~s(attachment; filename="#{filename}"))
@@ -61,6 +59,11 @@ defmodule RekiWeb.PackageController do
         conn
         |> put_status(:bad_request)
         |> json(%{error: "Invalid publish payload"})
+
+      {:error, :invalid_tarball_encoding} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "Invalid tarball encoding"})
 
       {:error, %Ecto.Changeset{} = cs} ->
         conn

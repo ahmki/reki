@@ -10,7 +10,7 @@ defmodule Reki.Packages.Package do
     field :description, :string
     field :dist_tags, :map, default: %{}
 
-    has_many :versions, Reki.PackageVersions
+    has_many :versions, Reki.Packages.PackageVersion
 
     timestamps(type: :utc_datetime)
   end

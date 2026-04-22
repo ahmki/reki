@@ -4,7 +4,10 @@ defmodule Reki.Repo.Migrations.CreatePackageVersions do
   def change do
     create table(:package_versions, primary_key: false) do
       add :id, :binary_id, primary_key: true
-      add :package_id, references(:packages, type: :binary_id, on_delete: :delete_all), null: false
+
+      add :package_id, references(:packages, type: :binary_id, on_delete: :delete_all),
+        null: false
+
       add :version, :string, null: false
       add :manifest, :map, null: false
       add :shasum, :string

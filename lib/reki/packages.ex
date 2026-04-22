@@ -17,7 +17,7 @@ defmodule Reki.Packages do
       Repo.one(
         from v in PackageVersion,
           join: p in assoc(v, :package),
-          where: p.title == ^title and v.version == ^version
+          where: p.title == ^title and v.version == ^version and v.validation_status == :approved
       )
 
     case result do
@@ -26,10 +26,26 @@ defmodule Reki.Packages do
     end
   end
 
+  def get_tarball(title, filename) do
+    key = "#{title}/-/#{filename}"
+    version = version_from_filename(title, filename)
+
+    with true <- String.ends_with?(filename, ".tgz"),
+         true <- tarball_matches?(title, version),
+         {:ok, data} <- Reki.Storage.get(key) do
+      {:ok, data}
+    else
+      false -> {:error, :not_found}
+      {:error, :enoent} -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   # ── Publish ────────────────────────────────────────────────────────────────
 
   def publish(title, body) do
     with {:ok, version, manifest, tarball} <- extract_publish_payload(title, body),
+         :ok <- validate_manifest(title, version, manifest),
          {:ok, url, shasum, integrity, size} <- store_tarball(title, version, tarball),
          {:ok, pkg} <- upsert_package(title, version, manifest),
          {:ok, vsn} <- insert_version(pkg.id, version, manifest, url, shasum, integrity, size) do
@@ -77,7 +93,7 @@ defmodule Reki.Packages do
   defp extract_publish_payload(title, body) do
     version = get_in(body, ["dist-tags", "latest"])
     manifest = get_in(body, ["versions", version])
-    attachment_key = "#{title}-#{version}.tgz"
+    attachment_key = tarball_filename(title, version)
     tarball_b64 = get_in(body, ["_attachments", attachment_key, "data"])
 
     with false <- is_nil(version),
@@ -131,7 +147,7 @@ defmodule Reki.Packages do
     size = byte_size(tarball)
 
     case Reki.Storage.put(tarball_key(title, version), tarball) do
-      {:ok, url} -> {:ok, url, shasum, integrity, size}
+      :ok -> {:ok, tarball_url(title, version), shasum, integrity, size}
       error -> error
     end
   end
@@ -144,5 +160,41 @@ defmodule Reki.Packages do
     )
   end
 
-  defp tarball_key(title, version), do: "#{title}/-/#{title}-#{version}.tgz"
+  defp validate_manifest(title, version, manifest) do
+    with ^title <- manifest["name"],
+         ^version <- manifest["version"] do
+      :ok
+    else
+      _ -> {:error, :invalid_payload}
+    end
+  end
+
+  defp tarball_matches?(title, filename) do
+    Repo.exists?(
+      from v in PackageVersion,
+        join: p in assoc(v, :package),
+        where:
+          p.title == ^title and v.validation_status == :approved and
+            v.version == ^filename
+    )
+  end
+
+  defp version_from_filename(title, filename) do
+    filename
+    |> String.trim_leading("#{package_slug(title)}-")
+    |> String.trim_trailing(".tgz")
+  end
+
+  defp tarball_url(title, version),
+    do: "/api/#{URI.encode(title)}/-/#{tarball_filename(title, version)}"
+
+  defp tarball_key(title, version), do: "#{title}/-/#{tarball_filename(title, version)}"
+
+  defp tarball_filename(title, version), do: "#{package_slug(title)}-#{version}.tgz"
+
+  defp package_slug(title) do
+    title
+    |> String.split("/")
+    |> List.last()
+  end
 end

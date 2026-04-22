@@ -9,8 +9,8 @@ defmodule Reki.Packages.PackageVersion do
     field :manifest, :map
     field :tarball_url, :string
     field :tarball_size, :integer
-    field :shasum, :integer
-    field :integrity, :integer
+    field :shasum, :string
+    field :integrity, :string
     field :validation_results, :map, default: %{}
 
     field :validation_status, Ecto.Enum,
@@ -31,6 +31,8 @@ defmodule Reki.Packages.PackageVersion do
       :manifest,
       :tarball_url,
       :tarball_size,
+      :shasum,
+      :integrity,
       :validation_status,
       :validation_results
     ])

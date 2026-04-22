@@ -12,7 +12,6 @@ defmodule RekiWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
-
   end
 
   scope "/api", RekiWeb do
