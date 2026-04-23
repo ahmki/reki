@@ -2,12 +2,30 @@ defmodule Reki.PackageApproval do
   import Ecto.Query
 
   alias Reki.PackageApproval.{ApprovalRun, Runner, Worker}
+  alias Reki.Packages.PackageVersion
   alias Reki.Repo
+
+  def request(%PackageVersion{id: package_version_id}) do
+    request(package_version_id)
+  end
+
+  def request(package_version_id) when is_binary(package_version_id) do
+    %{package_version_id: package_version_id}
+    |> Worker.new()
+    |> Oban.insert()
+  end
 
   def enqueue(package_version_id) do
     %{package_version_id: package_version_id}
     |> Worker.new()
     |> Oban.insert()
+    |> case do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def run(package_version_id) do

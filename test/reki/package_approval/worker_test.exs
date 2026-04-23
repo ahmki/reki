@@ -31,6 +31,8 @@ defmodule Reki.PackageApproval.WorkerTest do
     assert {:ok, %PackageVersion{} = package_version} =
              Packages.publish("executor-error", publish_payload("executor-error", "1.0.0"))
 
+    assert {:ok, _job} = PackageApproval.request(package_version)
+
     assert_raise RuntimeError, ~r/package approval failed unexpectedly/, fn ->
       perform_job(Worker, %{"package_version_id" => package_version.id})
     end

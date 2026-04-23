@@ -1,7 +1,6 @@
 defmodule Reki.Packages do
   import Ecto.Query
-  alias Ecto.Multi
-  alias Reki.PackageApproval
+
   alias Reki.Repo
   alias Reki.Packages.{Package, PackageVersion}
 
@@ -123,20 +122,8 @@ defmodule Reki.Packages do
   end
 
   defp publish_version(name, version, manifest, url, shasum, integrity, size) do
-    Multi.new()
-    |> Multi.run(:package, fn _repo, _changes ->
-      upsert_package(name, version, manifest)
-    end)
-    |> Multi.run(:package_version, fn _repo, %{package: pkg} ->
+    with {:ok, pkg} <- upsert_package(name, version, manifest) do
       insert_version(pkg.id, version, manifest, url, shasum, integrity, size)
-    end)
-    |> Multi.run(:approval_job, fn _repo, %{package_version: version_record} ->
-      PackageApproval.enqueue(version_record.id)
-    end)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{package_version: version_record}} -> {:ok, version_record}
-      {:error, _step, reason, _changes} -> {:error, reason}
     end
   end
 

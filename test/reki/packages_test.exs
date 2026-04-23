@@ -18,7 +18,7 @@ defmodule Reki.PackagesTest do
   end
 
   describe "publish/2" do
-    test "persists integrity data, hides pending versions from installs, and enqueues approval" do
+    test "persists integrity data, hides pending versions from installs, and does not enqueue approval" do
       name = "widget"
       version = "1.0.0"
 
@@ -31,7 +31,7 @@ defmodule Reki.PackagesTest do
       assert package_version.validation_status == :pending
       assert package_version.shasum == sha1(tarball)
       assert package_version.integrity == sha512(tarball)
-      assert_enqueued(worker: Worker, args: %{"package_version_id" => package_version.id})
+      refute_enqueued(worker: Worker, args: %{"package_version_id" => package_version.id})
 
       persisted = Repo.get!(PackageVersion, package_version.id)
       assert persisted.shasum == sha1(tarball)
@@ -66,6 +66,7 @@ defmodule Reki.PackagesTest do
                Packages.publish(name, publish_payload(name, version, tarball))
 
       assert {:error, :not_found} = Packages.get_tarball(name, "widget-1.0.0.tgz")
+      assert {:ok, _job} = PackageApproval.request(package_version)
       assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
 
       assert {:ok, manifest} = Packages.get_version(name, version)
@@ -100,6 +101,7 @@ defmodule Reki.PackagesTest do
       assert {:ok, %PackageVersion{} = package_version} =
                Packages.publish(name, publish_payload(name, version))
 
+      assert {:ok, _job} = PackageApproval.request(package_version)
       assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
 
       blocked = Repo.get!(PackageVersion, package_version.id)
@@ -121,6 +123,8 @@ defmodule Reki.PackagesTest do
       assert {:ok, %PackageVersion{} = package_version} =
                Packages.publish(name, publish_payload(name, version))
 
+      assert {:ok, _job} = PackageApproval.request(package_version)
+
       %ApprovalRun{}
       |> ApprovalRun.changeset(%{
         package_version_id: package_version.id,
@@ -136,6 +140,17 @@ defmodule Reki.PackagesTest do
                from(run in ApprovalRun, where: run.package_version_id == ^package_version.id),
                :count
              ) == 1
+    end
+
+    test "request enqueues an approval job" do
+      name = "request-widget"
+      version = "1.0.0"
+
+      assert {:ok, %PackageVersion{} = package_version} =
+               Packages.publish(name, publish_payload(name, version))
+
+      assert {:ok, _job} = PackageApproval.request(package_version)
+      assert_enqueued(worker: Worker, args: %{"package_version_id" => package_version.id})
     end
   end
 
