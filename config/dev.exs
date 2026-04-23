@@ -86,3 +86,13 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+ config :reki, :package_approval_steps, [
+    %{
+      name: "package-json-check",
+      command: "elixir",
+      args: ["-e", "File.read!(\"package.json\") |> IO.write()"],
+      timeout: 5_000,
+      blocking: true
+    }
+  ]
