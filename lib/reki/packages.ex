@@ -3,6 +3,7 @@ defmodule Reki.Packages do
 
   alias Reki.Repo
   alias Reki.Packages.{Package, PackageVersion}
+  alias Reki.PackageApproval
 
   # ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,13 @@ defmodule Reki.Packages do
          {:ok, url, shasum, integrity, size} <- store_tarball(name, version, tarball),
          {:ok, vsn} <- publish_version(name, version, manifest, url, shasum, integrity, size) do
       {:ok, vsn}
+    end
+  end
+
+  def request_approval(name, version) do
+    case get_package_version(name, version) do
+      nil -> {:error, :not_found}
+      package_version -> PackageApproval.request(package_version)
     end
   end
 
@@ -163,6 +171,14 @@ defmodule Reki.Packages do
       from p in Package,
         where: p.name == ^name,
         preload: :versions
+    )
+  end
+
+  defp get_package_version(name, version) do
+    Repo.one(
+      from v in PackageVersion,
+        join: p in assoc(v, :package),
+        where: p.name == ^name and v.version == ^version
     )
   end
 

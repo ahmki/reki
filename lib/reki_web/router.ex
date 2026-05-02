@@ -23,6 +23,7 @@ defmodule RekiWeb.Router do
     get "/:name/-/:filename", PackageController, :download_tarball
 
     put "/:name", PackageController, :publish
+    post "/:name/:version/approval", PackageController, :request_approval
   end
 
   scope "/", RekiWeb do

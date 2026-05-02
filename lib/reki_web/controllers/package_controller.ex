@@ -77,6 +77,25 @@ defmodule RekiWeb.PackageController do
     end
   end
 
+  def request_approval(conn, %{"name" => name, "version" => version}) do
+    case Packages.request_approval(URI.decode(name), version) do
+      {:ok, _job} ->
+        conn
+        |> put_status(:accepted)
+        |> json(%{ok: true, id: "#{name}@#{version}"})
+
+      {:error, :not_found} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "Not found: #{name}@#{version}"})
+
+      {:error, reason} ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: inspect(reason)})
+    end
+  end
+
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Enum.reduce(opts, msg, fn {key, value}, acc ->
