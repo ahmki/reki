@@ -5,6 +5,7 @@ defmodule Reki.PackageApproval.WorkerTest do
   import Reki.PackagesFixtures
 
   alias Reki.PackageApproval
+  alias Reki.PackageApproval.ApprovalRun
   alias Reki.PackageApproval.Worker
   alias Reki.Packages
   alias Reki.Packages.PackageVersion
@@ -42,6 +43,7 @@ defmodule Reki.PackageApproval.WorkerTest do
 
     run = PackageApproval.latest_run(package_version.id)
     assert run.status == :errored
+    assert Repo.aggregate(ApprovalRun, :count) == 1
     assert Enum.at(run.steps, 0).status == :errored
   end
 

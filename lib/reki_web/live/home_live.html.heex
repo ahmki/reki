@@ -1,4 +1,4 @@
-<Layouts.app flash={@flash} current_scope={assigns[:current_scope]}>
+<Layouts.app flash={@flash} current_scope={@current_scope}>
   <section class="relative overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,244,235,0.92))] px-6 py-8 shadow-[0_24px_80px_rgba(139,69,19,0.12)] sm:px-8 lg:px-10">
     <div class="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.22),transparent_58%)] lg:block" />
     <div class="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
@@ -52,7 +52,7 @@
       </div>
     </div>
 
-    <div :if={Enum.empty?(@packages)} id="package-empty-state" class="py-16 text-center">
+    <div :if={@stats.package_count == 0} id="package-empty-state" class="py-16 text-center">
       <div class="mx-auto flex max-w-md flex-col items-center gap-4">
         <div class="flex size-16 items-center justify-center rounded-2xl bg-orange-100 text-orange-700">
           <.icon name="hero-inbox-stack" class="size-8" />
@@ -66,10 +66,10 @@
       </div>
     </div>
 
-    <div :if={not Enum.empty?(@packages)} id="package-catalog" class="mt-6 grid gap-4">
+    <div id="package-catalog" phx-update="stream" class="mt-6 grid gap-4">
       <article
-        :for={package <- @packages}
-        id={"package-#{package.id}"}
+        :for={{dom_id, package} <- @streams.packages}
+        id={dom_id}
         class="group rounded-[1.75rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.9))] p-5 transition duration-200 hover:-translate-y-0.5 hover:border-orange-300/70 hover:shadow-[0_18px_45px_rgba(251,146,60,0.12)] sm:p-6"
       >
         <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">

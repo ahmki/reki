@@ -2,6 +2,7 @@ defmodule Reki.PackageApproval do
   import Ecto.Query
 
   alias Reki.PackageApproval.{ApprovalRun, Runner, Worker}
+  alias Reki.Packages
   alias Reki.Packages.PackageVersion
   alias Reki.Repo
 
@@ -10,9 +11,38 @@ defmodule Reki.PackageApproval do
   end
 
   def request(package_version_id) when is_binary(package_version_id) do
-    %{package_version_id: package_version_id}
-    |> Worker.new()
-    |> Oban.insert()
+    steps = steps()
+
+    Repo.transaction(fn ->
+      case active_run(package_version_id) do
+        nil ->
+          %ApprovalRun{}
+          |> ApprovalRun.changeset(%{
+            package_version_id: package_version_id,
+            status: :queued,
+            command_set_digest: command_set_digest(steps)
+          })
+          |> Repo.insert!()
+
+          %{package_version_id: package_version_id}
+          |> Worker.new()
+          |> Oban.insert!()
+
+        run ->
+          run
+      end
+    end)
+    |> case do
+      {:ok, %Oban.Job{} = job} ->
+        Packages.broadcast_catalog_updated()
+        {:ok, job}
+
+      {:ok, %ApprovalRun{}} ->
+        {:ok, :already_queued}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def enqueue(package_version_id) do
@@ -61,6 +91,16 @@ defmodule Reki.PackageApproval do
 
   def executor_module do
     Application.get_env(:reki, :package_approval_executor, Reki.PackageApproval.Executor)
+  end
+
+  defp active_run(package_version_id) do
+    Repo.one(
+      from run in ApprovalRun,
+        where:
+          run.package_version_id == ^package_version_id and run.status in [:queued, :running],
+        order_by: [desc: run.inserted_at],
+        limit: 1
+    )
   end
 
   defp normalize_step!(step) when is_list(step) do

@@ -5,14 +5,24 @@ defmodule Reki.Packages do
   alias Reki.Packages.{Package, PackageVersion}
   alias Reki.PackageApproval
 
+  @catalog_topic "packages:catalog"
+
   # ── Fetch ──────────────────────────────────────────────────────────────────
 
   def list_packages_for_catalog do
     Package
     |> order_by([p], asc: p.name)
-    |> preload(:versions)
+    |> preload(versions: ^from(v in PackageVersion, preload: [:approval_runs]))
     |> Repo.all()
     |> Enum.map(&build_catalog_entry/1)
+  end
+
+  def subscribe_catalog do
+    Phoenix.PubSub.subscribe(Reki.PubSub, @catalog_topic)
+  end
+
+  def broadcast_catalog_updated do
+    Phoenix.PubSub.broadcast(Reki.PubSub, @catalog_topic, :catalog_updated)
   end
 
   def get_packument(name) do
@@ -58,6 +68,7 @@ defmodule Reki.Packages do
          :ok <- validate_manifest(name, version, manifest),
          {:ok, url, shasum, integrity, size} <- store_tarball(name, version, tarball),
          {:ok, vsn} <- publish_version(name, version, manifest, url, shasum, integrity, size) do
+      broadcast_catalog_updated()
       {:ok, vsn}
     end
   end
@@ -108,8 +119,10 @@ defmodule Reki.Packages do
     versions =
       Enum.sort_by(package.versions, &{DateTime.to_unix(&1.inserted_at), &1.version}, :desc)
 
+    latest_version = List.first(versions)
     approved_version = Enum.find(versions, &(&1.validation_status == :approved))
     total_versions = length(versions)
+    latest_run = latest_version && latest_approval_run(latest_version)
 
     %{
       id: package.id,
@@ -120,7 +133,8 @@ defmodule Reki.Packages do
       approved_versions: count_versions(versions, :approved),
       pending_versions: count_versions(versions, :pending),
       blocked_versions: count_versions(versions, :blocked),
-      latest_published_at: versions |> List.first() |> then(&(&1 && &1.inserted_at)),
+      latest_published_at: latest_version && latest_version.inserted_at,
+      latest_release_status: latest_release_status(latest_version, latest_run),
       latest_approved_version: approved_version && approved_version.version,
       latest_approved_at: approved_version && approved_version.inserted_at
     }
@@ -129,6 +143,17 @@ defmodule Reki.Packages do
   defp count_versions(versions, status) do
     Enum.count(versions, &(&1.validation_status == status))
   end
+
+  defp latest_approval_run(%PackageVersion{} = version) do
+    version.approval_runs
+    |> Enum.sort_by(&{DateTime.to_unix(&1.inserted_at), &1.id}, :desc)
+    |> List.first()
+  end
+
+  defp latest_release_status(nil, _latest_run), do: :none
+  defp latest_release_status(_version, %_{status: :queued}), do: :queued
+  defp latest_release_status(_version, %_{status: :running}), do: :running
+  defp latest_release_status(%PackageVersion{validation_status: status}, _latest_run), do: status
 
   # ── Publish helpers ────────────────────────────────────────────────────────
 

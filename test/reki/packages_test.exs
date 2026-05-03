@@ -125,14 +125,14 @@ defmodule Reki.PackagesTest do
 
       assert {:ok, _job} = PackageApproval.request(package_version)
 
-      %ApprovalRun{}
+      queued_run = PackageApproval.latest_run(package_version.id)
+
+      queued_run
       |> ApprovalRun.changeset(%{
-        package_version_id: package_version.id,
         status: :running,
-        started_at: DateTime.utc_now() |> DateTime.truncate(:second),
-        command_set_digest: "manual"
+        started_at: DateTime.utc_now() |> DateTime.truncate(:second)
       })
-      |> Repo.insert!()
+      |> Repo.update!()
 
       assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
 
@@ -191,6 +191,20 @@ defmodule Reki.PackagesTest do
       assert blocked_widget.latest_approved_version == nil
       assert %DateTime{} = blocked_widget.latest_published_at
       assert blocked_widget.latest_approved_at == nil
+    end
+
+    test "marks the latest release as queued after approval is requested" do
+      assert {:ok, %PackageVersion{} = package_version} =
+               Packages.publish("queued-widget", publish_payload("queued-widget", "1.0.0"))
+
+      assert {:ok, _job} = PackageApproval.request(package_version)
+
+      [queued_widget] = Packages.list_packages_for_catalog()
+
+      assert queued_widget.name == "queued-widget"
+      assert queued_widget.latest_release_status == :queued
+      assert queued_widget.latest_approved_version == nil
+      assert PackageApproval.latest_run(package_version.id).status == :queued
     end
   end
 

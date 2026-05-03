@@ -1,6 +1,6 @@
 {
   "name": "widget-test",
-  "version": "1.0.4",
+  "version": "1.0.9",
   "description": "Fixture package for exercising the local Reki npm registry",
   "main": "index.js",
   "files": [

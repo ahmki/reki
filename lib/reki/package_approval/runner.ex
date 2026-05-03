@@ -3,6 +3,7 @@ defmodule Reki.PackageApproval.Runner do
 
   alias Reki.PackageApproval
   alias Reki.PackageApproval.{ApprovalRun, ApprovalRunStep}
+  alias Reki.Packages
   alias Reki.Packages.PackageVersion
   alias Reki.Repo
   alias Reki.Storage
@@ -36,18 +37,32 @@ defmodule Reki.PackageApproval.Runner do
   end
 
   defp start_run(package_version_id, steps) do
+    started_at = DateTime.utc_now() |> DateTime.truncate(:second)
+    digest = PackageApproval.command_set_digest(steps)
+
     Repo.transaction(fn ->
-      if run_active?(package_version_id) do
-        nil
-      else
-        %ApprovalRun{}
-        |> ApprovalRun.changeset(%{
-          package_version_id: package_version_id,
-          status: :running,
-          started_at: DateTime.utc_now() |> DateTime.truncate(:second),
-          command_set_digest: PackageApproval.command_set_digest(steps)
-        })
-        |> Repo.insert!()
+      case active_run(package_version_id) do
+        %ApprovalRun{status: :running} ->
+          nil
+
+        %ApprovalRun{status: :queued} = run ->
+          run
+          |> ApprovalRun.changeset(%{
+            status: :running,
+            started_at: started_at,
+            command_set_digest: digest
+          })
+          |> Repo.update!()
+
+        nil ->
+          %ApprovalRun{}
+          |> ApprovalRun.changeset(%{
+            package_version_id: package_version_id,
+            status: :running,
+            started_at: started_at,
+            command_set_digest: digest
+          })
+          |> Repo.insert!()
       end
     end)
   end
@@ -154,6 +169,8 @@ defmodule Reki.PackageApproval.Runner do
         ]
       )
     end)
+
+    Packages.broadcast_catalog_updated()
 
     {:ok, run_status}
   end
@@ -332,10 +349,13 @@ defmodule Reki.PackageApproval.Runner do
     get_in(step.command, ["blocking"]) and step.status in [:failed, :timed_out]
   end
 
-  defp run_active?(package_version_id) do
-    Repo.exists?(
+  defp active_run(package_version_id) do
+    Repo.one(
       from run in ApprovalRun,
-        where: run.package_version_id == ^package_version_id and run.status in [:queued, :running]
+        where:
+          run.package_version_id == ^package_version_id and run.status in [:queued, :running],
+        order_by: [desc: run.inserted_at],
+        limit: 1
     )
   end
 
