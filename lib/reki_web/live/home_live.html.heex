@@ -132,6 +132,23 @@
             </div>
           </div>
         </div>
+
+        <div class="mt-6 flex items-center justify-between gap-3 border-t border-slate-200/80 pt-5">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Package details
+            </p>
+            <p class="mt-1 text-sm text-slate-600">
+              Open the package page to inspect version history and approval output.
+            </p>
+          </div>
+          <.link
+            navigate={encoded_package_path(package.name)}
+            class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            View package <.icon name="hero-arrow-right" class="size-4" />
+          </.link>
+        </div>
       </article>
     </div>
   </section>

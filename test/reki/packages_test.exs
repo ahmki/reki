@@ -206,6 +206,36 @@ defmodule Reki.PackagesTest do
       assert queued_widget.latest_approved_version == nil
       assert PackageApproval.latest_run(package_version.id).status == :queued
     end
+
+    test "includes version runs and captured output" do
+      put_package_approval_steps([
+        %{
+          name: "io-check",
+          command: "elixir",
+          args: ["-e", "IO.write(\"ok\"); IO.write(:stderr, \"warn\")"],
+          timeout: 5_000,
+          blocking: true
+        }
+      ])
+
+      assert {:ok, %PackageVersion{} = package_version} =
+               Packages.publish("output-widget", publish_payload("output-widget", "1.0.0"))
+
+      assert {:ok, _job} = PackageApproval.request(package_version)
+      assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
+
+      assert {:ok, package} = Packages.get_package_for_catalog("output-widget")
+      [version] = package.versions
+      [step] = version.latest_run.steps
+
+      assert package.name == "output-widget"
+      assert version.version == "1.0.0"
+      assert version.validation_status == :approved
+      assert version.latest_run.status == :passed
+      assert step.name == "io-check"
+      assert step.stdout == "ok"
+      assert step.stderr == "warn"
+    end
   end
 
   defp storage_root do

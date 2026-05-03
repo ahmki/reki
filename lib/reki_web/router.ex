@@ -30,6 +30,7 @@ defmodule RekiWeb.Router do
     pipe_through :browser
 
     live "/", HomeLive
+    live "/packages/:name", PackageLive
   end
 
   # Other scopes may use custom stacks.

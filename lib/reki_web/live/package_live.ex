@@ -1,4 +1,4 @@
-defmodule RekiWeb.HomeLive do
+defmodule RekiWeb.PackageLive do
   use RekiWeb, :live_view
 
   alias Reki.Packages
@@ -12,12 +12,20 @@ defmodule RekiWeb.HomeLive do
     {:ok,
      socket
      |> assign(:current_scope, nil)
-     |> load_catalog()}
+     |> assign(:package, nil)
+     |> assign(:package_name, nil)
+     |> assign(:not_found, false)}
+  end
+
+  @impl true
+  def handle_params(%{"name" => encoded_name}, _uri, socket) do
+    package_name = URI.decode(encoded_name)
+    {:noreply, load_package(socket, package_name)}
   end
 
   @impl true
   def handle_info(:catalog_updated, socket) do
-    {:noreply, load_catalog(socket)}
+    {:noreply, load_package(socket, socket.assigns.package_name)}
   end
 
   def package_status_class(package) do
@@ -53,18 +61,6 @@ defmodule RekiWeb.HomeLive do
     end
   end
 
-  def relative_date(nil), do: "No releases yet"
-
-  def relative_date(datetime) do
-    days = Date.diff(Date.utc_today(), DateTime.to_date(datetime))
-
-    cond do
-      days == 0 -> "Today"
-      days == 1 -> "Yesterday"
-      true -> "#{days} days ago"
-    end
-  end
-
   def status_badge_class(:approved), do: "bg-emerald-500/15 text-emerald-700 ring-emerald-600/20"
   def status_badge_class(:passed), do: "bg-emerald-500/15 text-emerald-700 ring-emerald-600/20"
   def status_badge_class(:queued), do: "bg-sky-500/15 text-sky-700 ring-sky-600/20"
@@ -84,6 +80,18 @@ defmodule RekiWeb.HomeLive do
     |> String.capitalize()
   end
 
+  def relative_date(nil), do: "No releases yet"
+
+  def relative_date(datetime) do
+    days = Date.diff(Date.utc_today(), DateTime.to_date(datetime))
+
+    cond do
+      days == 0 -> "Today"
+      days == 1 -> "Yesterday"
+      true -> "#{days} days ago"
+    end
+  end
+
   def format_timestamp(nil), do: "Not started"
 
   def format_timestamp(datetime) do
@@ -91,25 +99,27 @@ defmodule RekiWeb.HomeLive do
   end
 
   def format_bytes(nil), do: "n/a"
-
   def format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
   def format_bytes(bytes) when bytes < 1_048_576, do: "#{Float.round(bytes / 1024, 1)} KB"
   def format_bytes(bytes), do: "#{Float.round(bytes / 1_048_576, 1)} MB"
 
   def encoded_package_path(name), do: "/packages/#{URI.encode(name)}"
 
-  defp load_catalog(socket) do
-    packages = Packages.list_packages_for_catalog()
+  defp load_package(socket, nil), do: socket
 
-    stats = %{
-      package_count: length(packages),
-      approved_count: Enum.count(packages, &(&1.approved_versions > 0)),
-      pending_count: Enum.sum(Enum.map(packages, & &1.pending_versions)),
-      blocked_count: Enum.sum(Enum.map(packages, & &1.blocked_versions))
-    }
+  defp load_package(socket, package_name) do
+    case Packages.get_package_for_catalog(package_name) do
+      {:ok, package} ->
+        socket
+        |> assign(:package_name, package_name)
+        |> assign(:package, package)
+        |> assign(:not_found, false)
 
-    socket
-    |> assign(:stats, stats)
-    |> stream(:packages, packages, reset: true)
+      {:error, :not_found} ->
+        socket
+        |> assign(:package_name, package_name)
+        |> assign(:package, nil)
+        |> assign(:not_found, true)
+    end
   end
 end

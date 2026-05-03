@@ -12,9 +12,47 @@ defmodule Reki.Packages do
   def list_packages_for_catalog do
     Package
     |> order_by([p], asc: p.name)
-    |> preload(versions: ^from(v in PackageVersion, preload: [:approval_runs]))
+    |> preload(
+      versions:
+        ^from(v in PackageVersion,
+          order_by: [desc: v.inserted_at, desc: v.version],
+          preload: [
+            approval_runs:
+              ^from(run in Reki.PackageApproval.ApprovalRun, order_by: [desc: run.inserted_at])
+          ]
+        )
+    )
     |> Repo.all()
     |> Enum.map(&build_catalog_entry/1)
+  end
+
+  def get_package_for_catalog(name) do
+    case Repo.one(
+           from p in Package,
+             where: p.name == ^name,
+             preload: [
+               versions:
+                 ^from(v in PackageVersion,
+                   order_by: [desc: v.inserted_at, desc: v.version],
+                   preload: [
+                     approval_runs:
+                       ^from(run in Reki.PackageApproval.ApprovalRun,
+                         order_by: [desc: run.inserted_at],
+                         preload: [
+                           steps:
+                             ^from(
+                               step in Reki.PackageApproval.ApprovalRunStep,
+                               order_by: [asc: step.inserted_at]
+                             )
+                         ]
+                       )
+                   ]
+                 )
+             ]
+         ) do
+      nil -> {:error, :not_found}
+      package -> {:ok, build_package_detail(package)}
+    end
   end
 
   def subscribe_catalog do
@@ -140,6 +178,12 @@ defmodule Reki.Packages do
     }
   end
 
+  defp build_package_detail(%Package{} = package) do
+    catalog_entry = build_catalog_entry(package)
+    versions = Enum.map(package.versions, &build_catalog_version/1)
+    Map.put(catalog_entry, :versions, versions)
+  end
+
   defp count_versions(versions, status) do
     Enum.count(versions, &(&1.validation_status == status))
   end
@@ -150,9 +194,52 @@ defmodule Reki.Packages do
     |> List.first()
   end
 
+  defp build_catalog_version(%PackageVersion{} = version) do
+    latest_run = latest_approval_run(version)
+
+    %{
+      id: version.id,
+      version: version.version,
+      inserted_at: version.inserted_at,
+      validation_status: version.validation_status,
+      tarball_size: version.tarball_size,
+      shasum: version.shasum,
+      integrity: version.integrity,
+      latest_run: build_catalog_run(latest_run)
+    }
+  end
+
+  defp build_catalog_run(nil), do: nil
+
+  defp build_catalog_run(run) do
+    %{
+      id: run.id,
+      status: run.status,
+      inserted_at: run.inserted_at,
+      started_at: run.started_at,
+      finished_at: run.finished_at,
+      summary: run.summary,
+      steps: Enum.map(run.steps, &build_catalog_step/1)
+    }
+  end
+
+  defp build_catalog_step(step) do
+    %{
+      id: step.id,
+      name: step.name,
+      status: step.status,
+      exit_code: step.exit_code,
+      command: step.command,
+      stdout: step.stdout,
+      stderr: step.stderr,
+      started_at: step.started_at,
+      finished_at: step.finished_at
+    }
+  end
+
   defp latest_release_status(nil, _latest_run), do: :none
-  defp latest_release_status(_version, %_{status: :queued}), do: :queued
-  defp latest_release_status(_version, %_{status: :running}), do: :running
+  defp latest_release_status(_version, %{status: :queued}), do: :queued
+  defp latest_release_status(_version, %{status: :running}), do: :running
   defp latest_release_status(%PackageVersion{validation_status: status}, _latest_run), do: status
 
   # ── Publish helpers ────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 defmodule RekiWeb.HomeLiveTest do
   use RekiWeb.ConnCase
+  use Oban.Testing, repo: Reki.Repo
 
   import Phoenix.LiveViewTest
   import Reki.PackagesFixtures
@@ -7,6 +8,11 @@ defmodule RekiWeb.HomeLiveTest do
   alias Reki.PackageApproval
   alias Reki.Packages
   alias Reki.Repo
+
+  setup do
+    put_package_approval_steps([])
+    :ok
+  end
 
   test "shows an empty state when no packages exist", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
@@ -55,5 +61,21 @@ defmodule RekiWeb.HomeLiveTest do
 
     assert has_element?(view, "#package-catalog", "queued-ui-widget")
     assert has_element?(view, "#package-catalog", "Queued")
+  end
+
+  test "links to the dedicated package view", %{conn: conn} do
+    assert {:ok, _approved} =
+             Packages.publish("@scope/widget", publish_payload("@scope/widget", "1.0.0"))
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#package-catalog", "@scope/widget")
+    assert has_element?(view, "a", "View package")
+  end
+
+  defp put_package_approval_steps(steps) do
+    previous = Application.get_env(:reki, :package_approval_steps, [])
+    Application.put_env(:reki, :package_approval_steps, steps)
+    on_exit(fn -> Application.put_env(:reki, :package_approval_steps, previous) end)
   end
 end
