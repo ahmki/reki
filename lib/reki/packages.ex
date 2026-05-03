@@ -26,68 +26,54 @@ defmodule Reki.Packages do
     |> Enum.map(&build_catalog_entry/1)
   end
 
+  defp versions_with_approval_runs_query do
+    from v in PackageVersion,
+      order_by: [desc: v.inserted_at, desc: v.version],
+      preload: [
+        approval_runs:
+          ^from(run in Reki.PackageApproval.ApprovalRun,
+            order_by: [desc: run.inserted_at],
+            preload: [
+              steps:
+                ^from(step in Reki.PackageApproval.ApprovalRunStep,
+                  order_by: [asc: step.inserted_at]
+                )
+            ]
+          )
+      ]
+  end
+
   def get_package_for_catalog(name) do
-    case Repo.one(
-           from p in Package,
-             where: p.name == ^name,
-             preload: [
-               versions:
-                 ^from(v in PackageVersion,
-                   order_by: [desc: v.inserted_at, desc: v.version],
-                   preload: [
-                     approval_runs:
-                       ^from(run in Reki.PackageApproval.ApprovalRun,
-                         order_by: [desc: run.inserted_at],
-                         preload: [
-                           steps:
-                             ^from(
-                               step in Reki.PackageApproval.ApprovalRunStep,
-                               order_by: [asc: step.inserted_at]
-                             )
-                         ]
-                       )
-                   ]
-                 )
-             ]
-         ) do
+    query = from p in Package,
+      where: p.name == ^name,
+      preload: [versions: ^versions_with_approval_runs_query()]
+
+    case Repo.one(query) do
       nil -> {:error, :not_found}
       package -> {:ok, build_package_detail(package)}
     end
   end
 
   def get_package_version_for_catalog(name, version) do
-    case Repo.one(
-           from p in Package,
-             where: p.name == ^name,
-             preload: [
-               versions:
-                 ^from(v in PackageVersion,
-                   where: v.version == ^version,
-                   preload: [
-                     approval_runs:
-                       ^from(run in Reki.PackageApproval.ApprovalRun,
-                         order_by: [desc: run.inserted_at],
-                         preload: [
-                           steps:
-                             ^from(
-                               step in Reki.PackageApproval.ApprovalRunStep,
-                               order_by: [asc: step.inserted_at]
-                             )
-                         ]
-                       )
-                   ]
-                 )
-             ]
-         ) do
+    versions_query =
+      versions_with_approval_runs_query()
+      |> where([v], v.version == ^version)
+
+    query = from p in Package,
+      where: p.name == ^name,
+      preload: [versions: ^versions_query]
+
+    case Repo.one(query) do
       %Package{versions: [package_version]} = package ->
-        {:ok,
-         %{package: build_catalog_entry(package), version: build_catalog_version(package_version)}}
+        {:ok, %{
+          package: build_catalog_entry(package),
+          version: build_catalog_version(package_version)
+        }}
 
       _ ->
         {:error, :not_found}
     end
   end
-
   def subscribe_catalog do
     Phoenix.PubSub.subscribe(Reki.PubSub, @catalog_topic)
   end
