@@ -35,40 +35,47 @@ defmodule RekiWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-      </div>
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
-          </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-          <li>
-            <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
+    <div class="min-h-screen bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.16),transparent_32%),linear-gradient(180deg,#fffdf8_0%,#f8fafc_48%,#f8fafc_100%)] text-slate-900">
+      <header class="px-4 py-5 sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-7xl flex-col gap-4 rounded-[1.75rem] border border-white/70 bg-white/80 px-5 py-4 shadow-[0_10px_35px_rgba(15,23,42,0.05)] backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <a href="/" class="flex items-center gap-3">
+            <div class="flex size-11 items-center justify-center rounded-2xl bg-slate-950 shadow-lg shadow-orange-200/60">
+              <img src={~p"/images/logo.svg"} width="24" />
+            </div>
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                Reki registry
+              </p>
+              <p class="text-base font-semibold text-slate-950">Package observability</p>
+            </div>
+          </a>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <a
+              href={~p"/"}
+              class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-orange-700"
+            >
+              Catalog
             </a>
-          </li>
-        </ul>
-      </div>
-    </header>
+            <a
+              href="/api/-/ping"
+              class="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-orange-700"
+            >
+              API health
+            </a>
+            <.theme_toggle />
+          </div>
+        </div>
+      </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
-        {render_slot(@inner_block)}
-      </div>
-    </main>
+      <main class="px-4 pb-16 sm:px-6 lg:px-8">
+        <div class="mx-auto max-w-7xl space-y-6">
+          {render_slot(@inner_block)}
+        </div>
+      </main>
 
-    <.flash_group flash={@flash} />
+      <.flash_group flash={@flash} />
+    </div>
     """
   end
 
@@ -122,31 +129,31 @@ defmodule RekiWeb.Layouts do
   """
   def theme_toggle(assigns) do
     ~H"""
-    <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
-      <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]" />
+    <div class="relative flex flex-row items-center rounded-full border border-slate-200 bg-slate-100 p-1">
+      <div class="absolute left-1 h-9 w-9 rounded-full bg-white shadow-sm transition-[transform] [[data-theme=light]_&]:translate-x-10 [[data-theme=dark]_&]:translate-x-20" />
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="relative z-10 flex w-10 cursor-pointer justify-center p-2 text-slate-500 transition hover:text-slate-900"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="system"
       >
-        <.icon name="hero-computer-desktop-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-computer-desktop" class="size-4" />
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="relative z-10 flex w-10 cursor-pointer justify-center p-2 text-slate-500 transition hover:text-slate-900"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="light"
       >
-        <.icon name="hero-sun-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-sun" class="size-4" />
       </button>
 
       <button
-        class="flex p-2 cursor-pointer w-1/3"
+        class="relative z-10 flex w-10 cursor-pointer justify-center p-2 text-slate-500 transition hover:text-slate-900"
         phx-click={JS.dispatch("phx:set-theme")}
         data-phx-theme="dark"
       >
-        <.icon name="hero-moon-micro" class="size-4 opacity-75 hover:opacity-100" />
+        <.icon name="hero-moon" class="size-4" />
       </button>
     </div>
     """

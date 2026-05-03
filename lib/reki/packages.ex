@@ -7,6 +7,14 @@ defmodule Reki.Packages do
 
   # ── Fetch ──────────────────────────────────────────────────────────────────
 
+  def list_packages_for_catalog do
+    Package
+    |> order_by([p], asc: p.name)
+    |> preload(:versions)
+    |> Repo.all()
+    |> Enum.map(&build_catalog_entry/1)
+  end
+
   def get_packument(name) do
     case get_package(name) do
       nil -> {:error, :not_found}
@@ -94,6 +102,32 @@ defmodule Reki.Packages do
     Map.new(versions, fn v ->
       {v.version, DateTime.to_iso8601(v.inserted_at)}
     end)
+  end
+
+  defp build_catalog_entry(%Package{} = package) do
+    versions =
+      Enum.sort_by(package.versions, &{DateTime.to_unix(&1.inserted_at), &1.version}, :desc)
+
+    approved_version = Enum.find(versions, &(&1.validation_status == :approved))
+    total_versions = length(versions)
+
+    %{
+      id: package.id,
+      name: package.name,
+      description: package.description,
+      latest: package.latest,
+      total_versions: total_versions,
+      approved_versions: count_versions(versions, :approved),
+      pending_versions: count_versions(versions, :pending),
+      blocked_versions: count_versions(versions, :blocked),
+      latest_published_at: versions |> List.first() |> then(&(&1 && &1.inserted_at)),
+      latest_approved_version: approved_version && approved_version.version,
+      latest_approved_at: approved_version && approved_version.inserted_at
+    }
+  end
+
+  defp count_versions(versions, status) do
+    Enum.count(versions, &(&1.validation_status == status))
   end
 
   # ── Publish helpers ────────────────────────────────────────────────────────

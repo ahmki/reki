@@ -154,6 +154,46 @@ defmodule Reki.PackagesTest do
     end
   end
 
+  describe "list_packages_for_catalog/0" do
+    test "returns package availability summary for the frontend" do
+      assert {:ok, approved} =
+               Packages.publish("approved-widget", publish_payload("approved-widget", "1.0.0"))
+
+      Repo.update!(Ecto.Changeset.change(approved, validation_status: :approved))
+
+      assert {:ok, _pending} =
+               Packages.publish("approved-widget", publish_payload("approved-widget", "1.1.0"))
+
+      assert {:ok, blocked} =
+               Packages.publish("blocked-widget", publish_payload("blocked-widget", "2.0.0"))
+
+      Repo.update!(Ecto.Changeset.change(blocked, validation_status: :blocked))
+
+      [approved_widget, blocked_widget] =
+        Packages.list_packages_for_catalog()
+        |> Enum.sort_by(& &1.name)
+
+      assert approved_widget.name == "approved-widget"
+      assert approved_widget.total_versions == 2
+      assert approved_widget.approved_versions == 1
+      assert approved_widget.pending_versions == 1
+      assert approved_widget.blocked_versions == 0
+      assert approved_widget.latest == "1.1.0"
+      assert approved_widget.latest_approved_version == "1.0.0"
+      assert %DateTime{} = approved_widget.latest_published_at
+      assert %DateTime{} = approved_widget.latest_approved_at
+
+      assert blocked_widget.name == "blocked-widget"
+      assert blocked_widget.total_versions == 1
+      assert blocked_widget.approved_versions == 0
+      assert blocked_widget.pending_versions == 0
+      assert blocked_widget.blocked_versions == 1
+      assert blocked_widget.latest_approved_version == nil
+      assert %DateTime{} = blocked_widget.latest_published_at
+      assert blocked_widget.latest_approved_at == nil
+    end
+  end
+
   defp storage_root do
     Application.fetch_env!(:reki, Reki.Storage)
     |> Keyword.fetch!(:root)
