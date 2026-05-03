@@ -94,5 +94,12 @@ config :reki, :package_approval_steps, [
     args: ["-e", "File.read!(\"package.json\") |> IO.write()"],
     timeout: 5_000,
     blocking: true
+  },
+  %{
+    name: "semgrep",
+    command: "semgrep",
+    args: ["scan", "--config", "auto", "--json", "."],
+    timeout: 30_000,
+    blocking: true
   }
 ]
