@@ -55,6 +55,39 @@ defmodule Reki.Packages do
     end
   end
 
+  def get_package_version_for_catalog(name, version) do
+    case Repo.one(
+           from p in Package,
+             where: p.name == ^name,
+             preload: [
+               versions:
+                 ^from(v in PackageVersion,
+                   where: v.version == ^version,
+                   preload: [
+                     approval_runs:
+                       ^from(run in Reki.PackageApproval.ApprovalRun,
+                         order_by: [desc: run.inserted_at],
+                         preload: [
+                           steps:
+                             ^from(
+                               step in Reki.PackageApproval.ApprovalRunStep,
+                               order_by: [asc: step.inserted_at]
+                             )
+                         ]
+                       )
+                   ]
+                 )
+             ]
+         ) do
+      %Package{versions: [package_version]} = package ->
+        {:ok,
+         %{package: build_catalog_entry(package), version: build_catalog_version(package_version)}}
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
   def subscribe_catalog do
     Phoenix.PubSub.subscribe(Reki.PubSub, @catalog_topic)
   end
@@ -116,6 +149,14 @@ defmodule Reki.Packages do
       nil -> {:error, :not_found}
       package_version -> PackageApproval.request(package_version)
     end
+  end
+
+  def approve_version(name, version) do
+    decide_version(name, version, :approved)
+  end
+
+  def block_version(name, version) do
+    decide_version(name, version, :blocked)
   end
 
   # ── Packument builder ──────────────────────────────────────────────────────
@@ -326,6 +367,34 @@ defmodule Reki.Packages do
         join: p in assoc(v, :package),
         where: p.name == ^name and v.version == ^version
     )
+  end
+
+  defp decide_version(name, version, status) do
+    case get_package_version(name, version) do
+      nil ->
+        {:error, :not_found}
+
+      %PackageVersion{validation_status: current_status} = package_version
+      when current_status == status ->
+        {:ok, package_version}
+
+      %PackageVersion{validation_status: current_status}
+      when current_status in [:approved, :blocked] ->
+        {:error, :already_decided}
+
+      %PackageVersion{} = package_version ->
+        package_version
+        |> Ecto.Changeset.change(validation_status: status)
+        |> Repo.update()
+        |> case do
+          {:ok, updated} ->
+            broadcast_catalog_updated()
+            {:ok, updated}
+
+          error ->
+            error
+        end
+    end
   end
 
   defp validate_manifest(name, version, manifest) do

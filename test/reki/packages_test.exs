@@ -43,7 +43,7 @@ defmodule Reki.PackagesTest do
       assert packument["versions"] == %{}
     end
 
-    test "approved versions are installable and tarballs remain protected by approval" do
+    test "versions remain pending after checks and become installable only after manual approval" do
       name = "@scope/widget"
       version = "1.0.0"
 
@@ -69,6 +69,13 @@ defmodule Reki.PackagesTest do
       assert {:ok, _job} = PackageApproval.request(package_version)
       assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
 
+      pending = Repo.get!(PackageVersion, package_version.id)
+      assert pending.validation_status == :pending
+      assert {:error, :not_found} = Packages.get_version(name, version)
+      assert {:error, :not_found} = Packages.get_tarball(name, "widget-1.0.0.tgz")
+
+      assert {:ok, _approved_version} = Packages.approve_version(name, version)
+
       assert {:ok, manifest} = Packages.get_version(name, version)
       assert manifest["name"] == name
       assert manifest["version"] == version
@@ -84,7 +91,7 @@ defmodule Reki.PackagesTest do
       assert step.status == :passed
     end
 
-    test "blocking failures mark versions blocked" do
+    test "failed checks keep versions pending until manually blocked" do
       name = "blocked-widget"
       version = "1.0.0"
 
@@ -104,8 +111,8 @@ defmodule Reki.PackagesTest do
       assert {:ok, _job} = PackageApproval.request(package_version)
       assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
 
-      blocked = Repo.get!(PackageVersion, package_version.id)
-      assert blocked.validation_status == :blocked
+      pending = Repo.get!(PackageVersion, package_version.id)
+      assert pending.validation_status == :pending
       assert {:error, :not_found} = Packages.get_version(name, version)
 
       assert %ApprovalRun{status: :failed, steps: [step]} =
@@ -114,6 +121,9 @@ defmodule Reki.PackagesTest do
       assert step.status == :failed
       assert step.exit_code == 7
       assert step.stderr =~ "denied"
+
+      assert {:ok, blocked} = Packages.block_version(name, version)
+      assert blocked.validation_status == :blocked
     end
 
     test "an active run prevents duplicate runs" do
@@ -230,11 +240,30 @@ defmodule Reki.PackagesTest do
 
       assert package.name == "output-widget"
       assert version.version == "1.0.0"
-      assert version.validation_status == :approved
+      assert version.validation_status == :pending
       assert version.latest_run.status == :passed
       assert step.name == "io-check"
       assert step.stdout == "ok"
       assert step.stderr == "warn"
+    end
+
+    test "manual decisions update installability" do
+      assert {:ok, _package_version} =
+               Packages.publish("decide-widget", publish_payload("decide-widget", "1.0.0"))
+
+      assert {:ok, approved} = Packages.approve_version("decide-widget", "1.0.0")
+      assert approved.validation_status == :approved
+      assert {:ok, _manifest} = Packages.get_version("decide-widget", "1.0.0")
+
+      assert {:ok, _package_version} =
+               Packages.publish(
+                 "block-decide-widget",
+                 publish_payload("block-decide-widget", "1.0.0")
+               )
+
+      assert {:ok, blocked} = Packages.block_version("block-decide-widget", "1.0.0")
+      assert blocked.validation_status == :blocked
+      assert {:error, :not_found} = Packages.get_version("block-decide-widget", "1.0.0")
     end
   end
 

@@ -5,6 +5,7 @@ defmodule RekiWeb.PackageControllerTest do
   import Ecto.Query
   import Reki.PackagesFixtures
 
+  alias Reki.Packages
   alias Reki.PackageApproval.Worker
 
   setup %{conn: conn} do
@@ -54,6 +55,14 @@ defmodule RekiWeb.PackageControllerTest do
                perform_job(Worker, %{
                  "package_version_id" => published_package_version_id(name, version)
                })
+
+      conn = get(build_conn(), ~p"/api/#{name}/#{version}")
+      assert %{"error" => "Not found: widget@1.0.0"} = json_response(conn, 404)
+
+      conn = get(build_conn(), ~p"/api/#{name}/-/widget-1.0.0.tgz")
+      assert %{"error" => "Not found: widget-1.0.0.tgz"} = json_response(conn, 404)
+
+      assert {:ok, _approved_version} = Packages.approve_version(name, version)
 
       conn = get(build_conn(), ~p"/api/#{name}/#{version}")
 

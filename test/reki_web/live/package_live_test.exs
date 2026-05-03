@@ -46,9 +46,7 @@ defmodule RekiWeb.PackageLiveTest do
     assert has_element?(view, "#package-versions", "1.0.0")
     assert has_element?(view, "#package-versions", "1.1.0")
     assert render(view) =~ "All package versions"
-    assert render(view) =~ "io-check"
-    assert render(view) =~ "ok"
-    assert render(view) =~ "warn"
+    assert has_element?(view, "a", "Inspect outputs")
   end
 
   test "refreshes when the package changes", %{conn: conn} do

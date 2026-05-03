@@ -148,7 +148,6 @@ defmodule Reki.PackageApproval.Runner do
     blocking_failure? = Enum.any?(steps, &blocking_failure?/1)
 
     run_status = if blocking_failure?, do: :failed, else: :passed
-    version_status = if blocking_failure?, do: :blocked, else: :approved
     finished_at = DateTime.utc_now() |> DateTime.truncate(:second)
 
     Repo.transaction(fn ->
@@ -163,7 +162,6 @@ defmodule Reki.PackageApproval.Runner do
       from(version in PackageVersion, where: version.id == ^package_version_id)
       |> Repo.update_all(
         set: [
-          validation_status: version_status,
           validation_results: summary,
           updated_at: finished_at
         ]

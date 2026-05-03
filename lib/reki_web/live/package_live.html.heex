@@ -117,12 +117,12 @@
         </div>
 
         <div id="package-versions" class="mt-6 grid gap-3">
-          <details
+          <article
             :for={version <- @package.versions}
             id={"package-version-#{version.id}"}
-            class="group overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 open:border-orange-300/70 open:bg-white"
+            class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
           >
-            <summary class="flex cursor-pointer list-none flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-2">
                 <div class="flex flex-wrap items-center gap-3">
                   <span class="text-lg font-semibold text-slate-950">{version.version}</span>
@@ -153,115 +153,42 @@
               </div>
 
               <div class="flex items-center gap-2 text-sm font-medium text-slate-500">
-                <span>Inspect outputs</span>
-                <.icon name="hero-chevron-down" class="size-4 transition group-open:rotate-180" />
-              </div>
-            </summary>
-
-            <div class="border-t border-slate-200 bg-white p-4">
-              <div class="grid gap-3 lg:grid-cols-3">
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Integrity
-                  </p>
-                  <p class="mt-2 break-all font-mono text-xs text-slate-700">
-                    {version.integrity}
-                  </p>
-                </div>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Shasum
-                  </p>
-                  <p class="mt-2 break-all font-mono text-xs text-slate-700">{version.shasum}</p>
-                </div>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Latest run
-                  </p>
-                  <%= if version.latest_run do %>
-                    <p class="mt-2 text-sm font-semibold text-slate-950">
-                      {humanize_status(version.latest_run.status)}
-                    </p>
-                    <p class="mt-1 text-xs text-slate-600">
-                      Started: {format_timestamp(version.latest_run.started_at)}
-                    </p>
-                    <p class="mt-1 text-xs text-slate-600">
-                      Finished: {format_timestamp(version.latest_run.finished_at)}
-                    </p>
-                  <% else %>
-                    <p class="mt-2 text-sm font-semibold text-slate-950">No approval run yet</p>
-                  <% end %>
-                </div>
-              </div>
-
-              <div class="mt-4">
-                <%= if version.latest_run do %>
-                  <div class="space-y-3">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="text-sm font-semibold text-slate-950">Approval steps</span>
-                      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                        {length(version.latest_run.steps)} recorded
-                      </span>
-                    </div>
-
-                    <div class="grid gap-3">
-                      <section
-                        :for={step <- version.latest_run.steps}
-                        id={"approval-step-#{step.id}"}
-                        class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                      >
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <div class="flex flex-wrap items-center gap-2">
-                              <p class="text-sm font-semibold text-slate-950">{step.name}</p>
-                              <span class={[
-                                "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset",
-                                status_badge_class(step.status)
-                              ]}>
-                                {humanize_status(step.status)}
-                              </span>
-                            </div>
-                            <p class="mt-2 break-all font-mono text-xs text-slate-600">
-                              {step.command["command"]} {Enum.join(
-                                step.command["args"] || [],
-                                " "
-                              )}
-                            </p>
-                          </div>
-                          <div class="text-xs text-slate-600">
-                            <p>Started: {format_timestamp(step.started_at)}</p>
-                            <p class="mt-1">Finished: {format_timestamp(step.finished_at)}</p>
-                            <p :if={not is_nil(step.exit_code)} class="mt-1">
-                              Exit code: {step.exit_code}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div class="mt-4 grid gap-3 lg:grid-cols-2">
-                          <div class="rounded-2xl border border-slate-200 bg-slate-950 p-4">
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                              Stdout
-                            </p>
-                            <pre class="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-emerald-100">{if step.stdout == "", do: "No stdout captured.", else: step.stdout}</pre>
-                          </div>
-                          <div class="rounded-2xl border border-slate-200 bg-slate-950 p-4">
-                            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                              Stderr
-                            </p>
-                            <pre class="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-100">{if step.stderr == "", do: "No stderr captured.", else: step.stderr}</pre>
-                          </div>
-                        </div>
-                      </section>
-                    </div>
-                  </div>
-                <% else %>
-                  <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                    This version has not produced any approval output yet.
-                  </div>
-                <% end %>
+                <.link
+                  navigate={encoded_version_path(@package.name, version.version)}
+                  class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-orange-300 hover:text-orange-700"
+                >
+                  Inspect outputs <.icon name="hero-arrow-right" class="size-4" />
+                </.link>
               </div>
             </div>
-          </details>
+
+            <div class="mt-4 grid gap-3 lg:grid-cols-3">
+              <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Latest run
+                </p>
+                <%= if version.latest_run do %>
+                  <p class="mt-2 text-sm font-semibold text-slate-950">
+                    {humanize_status(version.latest_run.status)}
+                  </p>
+                <% else %>
+                  <p class="mt-2 text-sm font-semibold text-slate-950">No approval run yet</p>
+                <% end %>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Integrity
+                </p>
+                <p class="mt-2 truncate font-mono text-xs text-slate-700">{version.integrity}</p>
+              </div>
+              <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Shasum
+                </p>
+                <p class="mt-2 truncate font-mono text-xs text-slate-700">{version.shasum}</p>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
     </section>

@@ -1,0 +1,226 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <%= if @not_found do %>
+    <section
+      id="package-version-not-found"
+      class="rounded-[2rem] border border-slate-200 bg-white p-8 text-center shadow-[0_16px_50px_rgba(15,23,42,0.06)]"
+    >
+      <div class="mx-auto max-w-lg space-y-4">
+        <div class="mx-auto flex size-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-700">
+          <.icon name="hero-exclamation-circle" class="size-8" />
+        </div>
+        <h1 class="text-3xl font-semibold tracking-tight text-slate-950">Version not found</h1>
+        <p class="text-sm leading-6 text-slate-600">
+          No version named {@version_name} exists for {@package_name}.
+        </p>
+        <.link
+          navigate={~p"/"}
+          class="inline-flex items-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
+          Back to catalog
+        </.link>
+      </div>
+    </section>
+  <% else %>
+    <section :if={@package && @version} class="space-y-6">
+      <section class="relative overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,244,235,0.92))] px-6 py-8 shadow-[0_24px_80px_rgba(139,69,19,0.12)] sm:px-8 lg:px-10">
+        <div class="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top,rgba(251,146,60,0.22),transparent_58%)] lg:block" />
+        <div class="relative space-y-6">
+          <div class="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-600">
+            <.link navigate={~p"/"} class="transition hover:text-orange-700">Catalog</.link>
+            <span>/</span>
+            <.link
+              navigate={encoded_package_path(@package.name)}
+              class="transition hover:text-orange-700"
+            >
+              {@package.name}
+            </.link>
+            <span>/</span>
+            <span>{@version.version}</span>
+          </div>
+
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div class="space-y-4">
+              <div class="flex flex-wrap items-center gap-3">
+                <h1 class="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+                  {@package.name}@{@version.version}
+                </h1>
+                <span class={[
+                  "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset",
+                  status_badge_class(@version.validation_status)
+                ]}>
+                  {humanize_status(@version.validation_status)}
+                </span>
+                <span
+                  :if={@version.latest_run}
+                  class={[
+                    "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset",
+                    status_badge_class(@version.latest_run.status)
+                  ]}
+                >
+                  Run: {humanize_status(@version.latest_run.status)}
+                </span>
+              </div>
+
+              <div class="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                <span class="rounded-full bg-white/80 px-3 py-1">
+                  Published: {format_timestamp(@version.inserted_at)}
+                </span>
+                <span class="rounded-full bg-white/80 px-3 py-1">
+                  Tarball: {format_bytes(@version.tarball_size)}
+                </span>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button
+                id="request-approval"
+                type="button"
+                phx-click="request_approval"
+                phx-value-version={@version.version}
+                disabled={not approval_requestable?(@version)}
+                class={[
+                  "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition",
+                  if(approval_requestable?(@version),
+                    do: "bg-slate-950 text-white hover:bg-slate-800",
+                    else: "cursor-not-allowed bg-slate-200 text-slate-500"
+                  )
+                ]}
+              >
+                {approval_action_label(@version)}
+              </button>
+              <button
+                id="approve-version"
+                type="button"
+                phx-click="approve_version"
+                phx-value-version={@version.version}
+                disabled={not manual_decision_available?(@version)}
+                class={[
+                  "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition",
+                  if(manual_decision_available?(@version),
+                    do: "bg-emerald-600 text-white hover:bg-emerald-500",
+                    else: "cursor-not-allowed bg-slate-200 text-slate-500"
+                  )
+                ]}
+              >
+                Approve
+              </button>
+              <button
+                id="block-version"
+                type="button"
+                phx-click="block_version"
+                phx-value-version={@version.version}
+                disabled={not manual_decision_available?(@version)}
+                class={[
+                  "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition",
+                  if(manual_decision_available?(@version),
+                    do: "bg-rose-600 text-white hover:bg-rose-500",
+                    else: "cursor-not-allowed bg-slate-200 text-slate-500"
+                  )
+                ]}
+              >
+                Block
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="rounded-[2rem] border border-slate-200/80 bg-white/90 p-4 shadow-[0_16px_50px_rgba(15,23,42,0.06)] sm:p-6">
+        <div class="grid gap-3 lg:grid-cols-3">
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Integrity
+            </p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-700">{@version.integrity}</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Shasum</p>
+            <p class="mt-2 break-all font-mono text-xs text-slate-700">{@version.shasum}</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Latest run
+            </p>
+            <%= if @version.latest_run do %>
+              <p class="mt-2 text-sm font-semibold text-slate-950">
+                {humanize_status(@version.latest_run.status)}
+              </p>
+              <p class="mt-1 text-xs text-slate-600">
+                Started: {format_timestamp(@version.latest_run.started_at)}
+              </p>
+              <p class="mt-1 text-xs text-slate-600">
+                Finished: {format_timestamp(@version.latest_run.finished_at)}
+              </p>
+            <% else %>
+              <p class="mt-2 text-sm font-semibold text-slate-950">No approval run yet</p>
+            <% end %>
+          </div>
+        </div>
+
+        <div class="mt-6">
+          <%= if @version.latest_run do %>
+            <div class="space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-semibold text-slate-950">Approval steps</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  {length(@version.latest_run.steps)} recorded
+                </span>
+              </div>
+
+              <div id="approval-steps" class="grid gap-3">
+                <section
+                  :for={step <- @version.latest_run.steps}
+                  id={"approval-step-#{step.id}"}
+                  class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p class="text-sm font-semibold text-slate-950">{step.name}</p>
+                        <span class={[
+                          "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset",
+                          status_badge_class(step.status)
+                        ]}>
+                          {humanize_status(step.status)}
+                        </span>
+                      </div>
+                      <p class="mt-2 break-all font-mono text-xs text-slate-600">
+                        {step.command["command"]} {Enum.join(step.command["args"] || [], " ")}
+                      </p>
+                    </div>
+                    <div class="text-xs text-slate-600">
+                      <p>Started: {format_timestamp(step.started_at)}</p>
+                      <p class="mt-1">Finished: {format_timestamp(step.finished_at)}</p>
+                      <p :if={not is_nil(step.exit_code)} class="mt-1">
+                        Exit code: {step.exit_code}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div class="rounded-2xl border border-slate-200 bg-slate-950 p-4">
+                      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Stdout
+                      </p>
+                      <pre class="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-emerald-100">{if step.stdout == "", do: "No stdout captured.", else: step.stdout}</pre>
+                    </div>
+                    <div class="rounded-2xl border border-slate-200 bg-slate-950 p-4">
+                      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Stderr
+                      </p>
+                      <pre class="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-6 text-rose-100">{if step.stderr == "", do: "No stderr captured.", else: step.stderr}</pre>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          <% else %>
+            <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              This version has not produced any approval output yet.
+            </div>
+          <% end %>
+        </div>
+      </section>
+    </section>
+  <% end %>
+</Layouts.app>

@@ -31,6 +31,7 @@ defmodule RekiWeb.Router do
 
     live "/", HomeLive
     live "/packages/:name", PackageLive
+    live "/packages/:name/versions/:version", PackageVersionLive
   end
 
   # Other scopes may use custom stacks.

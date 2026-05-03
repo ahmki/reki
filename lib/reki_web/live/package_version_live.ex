@@ -1,4 +1,4 @@
-defmodule RekiWeb.PackageLive do
+defmodule RekiWeb.PackageVersionLive do
   use RekiWeb, :live_view
 
   alias Reki.Packages
@@ -14,18 +14,19 @@ defmodule RekiWeb.PackageLive do
      |> assign(:current_scope, nil)
      |> assign(:package, nil)
      |> assign(:package_name, nil)
+     |> assign(:version, nil)
+     |> assign(:version_name, nil)
      |> assign(:not_found, false)}
   end
 
   @impl true
-  def handle_params(%{"name" => encoded_name}, _uri, socket) do
-    package_name = URI.decode(encoded_name)
-    {:noreply, load_package(socket, package_name)}
+  def handle_params(%{"name" => encoded_name, "version" => version_name}, _uri, socket) do
+    {:noreply, load_version(socket, URI.decode(encoded_name), version_name)}
   end
 
   @impl true
   def handle_info(:catalog_updated, socket) do
-    {:noreply, load_package(socket, socket.assigns.package_name)}
+    {:noreply, load_version(socket, socket.assigns.package_name, socket.assigns.version_name)}
   end
 
   @impl true
@@ -76,39 +77,6 @@ defmodule RekiWeb.PackageLive do
     end
   end
 
-  def package_status_class(package) do
-    cond do
-      package.latest_release_status == :queued ->
-        "bg-sky-500/15 text-sky-700 ring-sky-600/20"
-
-      package.latest_release_status == :running ->
-        "bg-indigo-500/15 text-indigo-700 ring-indigo-600/20"
-
-      package.latest_release_status == :pending ->
-        "bg-amber-500/15 text-amber-700 ring-amber-600/20"
-
-      package.latest_release_status == :blocked ->
-        "bg-rose-500/15 text-rose-700 ring-rose-600/20"
-
-      package.approved_versions > 0 ->
-        "bg-emerald-500/15 text-emerald-700 ring-emerald-600/20"
-
-      true ->
-        "bg-slate-500/15 text-slate-700 ring-slate-600/20"
-    end
-  end
-
-  def package_status_label(package) do
-    cond do
-      package.latest_release_status == :queued -> "Queued"
-      package.latest_release_status == :running -> "Running checks"
-      package.latest_release_status == :pending -> "Awaiting approval"
-      package.latest_release_status == :blocked -> "Blocked"
-      package.approved_versions > 0 -> "Installable"
-      true -> "No releases"
-    end
-  end
-
   def status_badge_class(:approved), do: "bg-emerald-500/15 text-emerald-700 ring-emerald-600/20"
   def status_badge_class(:passed), do: "bg-emerald-500/15 text-emerald-700 ring-emerald-600/20"
   def status_badge_class(:queued), do: "bg-sky-500/15 text-sky-700 ring-sky-600/20"
@@ -128,31 +96,13 @@ defmodule RekiWeb.PackageLive do
     |> String.capitalize()
   end
 
-  def relative_date(nil), do: "No releases yet"
-
-  def relative_date(datetime) do
-    days = Date.diff(Date.utc_today(), DateTime.to_date(datetime))
-
-    cond do
-      days == 0 -> "Today"
-      days == 1 -> "Yesterday"
-      true -> "#{days} days ago"
-    end
-  end
-
   def format_timestamp(nil), do: "Not started"
-
-  def format_timestamp(datetime) do
-    Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S UTC")
-  end
+  def format_timestamp(datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S UTC")
 
   def format_bytes(nil), do: "n/a"
   def format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"
   def format_bytes(bytes) when bytes < 1_048_576, do: "#{Float.round(bytes / 1024, 1)} KB"
   def format_bytes(bytes), do: "#{Float.round(bytes / 1_048_576, 1)} MB"
-
-  def encoded_package_path(name), do: "/packages/#{URI.encode(name)}"
-  def encoded_version_path(name, version), do: "/packages/#{URI.encode(name)}/versions/#{version}"
 
   def approval_requestable?(version) do
     version.validation_status == :pending and not active_run?(version)
@@ -173,6 +123,9 @@ defmodule RekiWeb.PackageLive do
       version.latest_run != nil
   end
 
+  def encoded_package_path(name), do: "/packages/#{URI.encode(name)}"
+  def encoded_version_path(name, version), do: "/packages/#{URI.encode(name)}/versions/#{version}"
+
   defp active_run?(version) do
     case version.latest_run do
       %{status: status} when status in [:queued, :running] -> true
@@ -180,20 +133,24 @@ defmodule RekiWeb.PackageLive do
     end
   end
 
-  defp load_package(socket, nil), do: socket
+  defp load_version(socket, nil, _version_name), do: socket
 
-  defp load_package(socket, package_name) do
-    case Packages.get_package_for_catalog(package_name) do
-      {:ok, package} ->
+  defp load_version(socket, package_name, version_name) do
+    case Packages.get_package_version_for_catalog(package_name, version_name) do
+      {:ok, %{package: package, version: version}} ->
         socket
         |> assign(:package_name, package_name)
+        |> assign(:version_name, version_name)
         |> assign(:package, package)
+        |> assign(:version, version)
         |> assign(:not_found, false)
 
       {:error, :not_found} ->
         socket
         |> assign(:package_name, package_name)
+        |> assign(:version_name, version_name)
         |> assign(:package, nil)
+        |> assign(:version, nil)
         |> assign(:not_found, true)
     end
   end
