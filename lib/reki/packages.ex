@@ -1,6 +1,5 @@
 defmodule Reki.Packages do
   import Ecto.Query
-  require Logger
 
   alias Reki.Repo
   alias Reki.Packages.{Package, PackageVersion}
@@ -136,10 +135,6 @@ defmodule Reki.Packages do
   end
 
   def import_from_upstream(name, version) do
-    Logger.debug(
-      "packages import_from_upstream start name=#{inspect(name)} version=#{inspect(version)}"
-    )
-
     with nil <- get_package_version(name, version),
          {:ok, manifest, tarball} <- upstream_registry_client().fetch_release(name, version),
          :ok <- validate_manifest(name, version, manifest),
@@ -147,54 +142,15 @@ defmodule Reki.Packages do
          {:ok, package_version} <-
            publish_version(name, version, manifest, url, shasum, integrity, size),
          {:ok, _job} <- PackageApproval.request(package_version) do
-      Logger.debug(
-        "packages import_from_upstream success name=#{inspect(name)} version=#{inspect(version)} tarball_url=#{inspect(url)} tarball_size=#{size} shasum=#{shasum}"
-      )
-
       broadcast_catalog_updated()
       {:ok, package_version}
     else
-      %PackageVersion{} ->
-        Logger.debug(
-          "packages import_from_upstream duplicate name=#{inspect(name)} version=#{inspect(version)}"
-        )
-
-        {:error, :already_exists}
-
-      {:error, :not_found} ->
-        Logger.debug(
-          "packages import_from_upstream upstream package missing name=#{inspect(name)} version=#{inspect(version)}"
-        )
-
-        {:error, :upstream_not_found}
-
-      {:error, :version_not_found} ->
-        Logger.debug(
-          "packages import_from_upstream upstream version missing name=#{inspect(name)} version=#{inspect(version)}"
-        )
-
-        {:error, :upstream_version_not_found}
-
-      {:error, :tarball_not_found} ->
-        Logger.debug(
-          "packages import_from_upstream upstream tarball missing name=#{inspect(name)} version=#{inspect(version)}"
-        )
-
-        {:error, :upstream_tarball_not_found}
-
-      {:error, :invalid_payload} ->
-        Logger.debug(
-          "packages import_from_upstream invalid upstream payload name=#{inspect(name)} version=#{inspect(version)}"
-        )
-
-        {:error, :invalid_upstream_payload}
-
-      {:error, reason} ->
-        Logger.debug(
-          "packages import_from_upstream failed name=#{inspect(name)} version=#{inspect(version)} reason=#{inspect(reason)}"
-        )
-
-        {:error, reason}
+      %PackageVersion{} -> {:error, :already_exists}
+      {:error, :not_found} -> {:error, :upstream_not_found}
+      {:error, :version_not_found} -> {:error, :upstream_version_not_found}
+      {:error, :tarball_not_found} -> {:error, :upstream_tarball_not_found}
+      {:error, :invalid_payload} -> {:error, :invalid_upstream_payload}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -409,24 +365,9 @@ defmodule Reki.Packages do
 
     size = byte_size(tarball)
 
-    Logger.debug(
-      "packages store_tarball prepared name=#{inspect(name)} version=#{inspect(version)} bytes=#{size}"
-    )
-
     case Reki.Storage.put(tarball_key(name, version), tarball) do
-      :ok ->
-        Logger.debug(
-          "packages store_tarball stored key=#{inspect(tarball_key(name, version))} url=#{inspect(tarball_url(name, version))}"
-        )
-
-        {:ok, tarball_url(name, version), shasum, integrity, size}
-
-      error ->
-        Logger.debug(
-          "packages store_tarball failed name=#{inspect(name)} version=#{inspect(version)} error=#{inspect(error)}"
-        )
-
-        error
+      :ok -> {:ok, tarball_url(name, version), shasum, integrity, size}
+      error -> error
     end
   end
 
@@ -477,18 +418,9 @@ defmodule Reki.Packages do
   defp validate_manifest(name, version, manifest) do
     with ^name <- manifest["name"],
          ^version <- manifest["version"] do
-      Logger.debug(
-        "packages validate_manifest ok name=#{inspect(name)} version=#{inspect(version)} manifest_dist_keys=#{inspect(if is_map(manifest["dist"]), do: Map.keys(manifest["dist"]) |> Enum.take(10), else: nil)}"
-      )
-
       :ok
     else
-      other ->
-        Logger.debug(
-          "packages validate_manifest failed expected_name=#{inspect(name)} expected_version=#{inspect(version)} actual_name=#{inspect(manifest["name"])} actual_version=#{inspect(manifest["version"])} mismatch=#{inspect(other)}"
-        )
-
-        {:error, :invalid_payload}
+      _ -> {:error, :invalid_payload}
     end
   end
 
