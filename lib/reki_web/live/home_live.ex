@@ -33,8 +33,7 @@ defmodule RekiWeb.HomeLive do
             {:noreply,
              socket
              |> put_flash(:info, "Imported #{name}@#{version} and queued approval.")
-             |> assign_import_form()
-             |> load_catalog()}
+             |> push_navigate(to: encoded_version_path(name, version))}
 
           {:error, reason} ->
             {:noreply,
@@ -128,6 +127,7 @@ defmodule RekiWeb.HomeLive do
   def format_bytes(bytes), do: "#{Float.round(bytes / 1_048_576, 1)} MB"
 
   def encoded_package_path(name), do: "/packages/#{URI.encode(name)}"
+  def encoded_version_path(name, version), do: "/packages/#{URI.encode(name)}/versions/#{version}"
 
   def import_form_defaults do
     %{"name" => "", "version" => ""}

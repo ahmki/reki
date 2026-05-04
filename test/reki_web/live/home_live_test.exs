@@ -91,9 +91,7 @@ defmodule RekiWeb.HomeLiveTest do
     |> form("#package-import-form", import: %{"name" => name, "version" => version})
     |> render_submit()
 
-    assert has_element?(view, "#package-catalog", name)
-    assert has_element?(view, "#package-catalog", "Queued")
-    assert render(view) =~ "Imported #{name}@#{version} and queued approval."
+    assert_redirect(view, "/packages/@scope/mirrored-live/versions/3.1.4")
   end
 
   test "shows an error when upstream import fails", %{conn: conn} do
