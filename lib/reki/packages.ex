@@ -1,5 +1,6 @@
 defmodule Reki.Packages do
   import Ecto.Query
+  require Logger
 
   alias Reki.Repo
   alias Reki.Packages.{Package, PackageVersion}
@@ -44,9 +45,10 @@ defmodule Reki.Packages do
   end
 
   def get_package_for_catalog(name) do
-    query = from p in Package,
-      where: p.name == ^name,
-      preload: [versions: ^versions_with_approval_runs_query()]
+    query =
+      from p in Package,
+        where: p.name == ^name,
+        preload: [versions: ^versions_with_approval_runs_query()]
 
     case Repo.one(query) do
       nil -> {:error, :not_found}
@@ -59,21 +61,24 @@ defmodule Reki.Packages do
       versions_with_approval_runs_query()
       |> where([v], v.version == ^version)
 
-    query = from p in Package,
-      where: p.name == ^name,
-      preload: [versions: ^versions_query]
+    query =
+      from p in Package,
+        where: p.name == ^name,
+        preload: [versions: ^versions_query]
 
     case Repo.one(query) do
       %Package{versions: [package_version]} = package ->
-        {:ok, %{
-          package: build_catalog_entry(package),
-          version: build_catalog_version(package_version)
-        }}
+        {:ok,
+         %{
+           package: build_catalog_entry(package),
+           version: build_catalog_version(package_version)
+         }}
 
       _ ->
         {:error, :not_found}
     end
   end
+
   def subscribe_catalog do
     Phoenix.PubSub.subscribe(Reki.PubSub, @catalog_topic)
   end
@@ -127,6 +132,69 @@ defmodule Reki.Packages do
          {:ok, vsn} <- publish_version(name, version, manifest, url, shasum, integrity, size) do
       broadcast_catalog_updated()
       {:ok, vsn}
+    end
+  end
+
+  def import_from_upstream(name, version) do
+    Logger.debug(
+      "packages import_from_upstream start name=#{inspect(name)} version=#{inspect(version)}"
+    )
+
+    with nil <- get_package_version(name, version),
+         {:ok, manifest, tarball} <- upstream_registry_client().fetch_release(name, version),
+         :ok <- validate_manifest(name, version, manifest),
+         {:ok, url, shasum, integrity, size} <- store_tarball(name, version, tarball),
+         {:ok, package_version} <-
+           publish_version(name, version, manifest, url, shasum, integrity, size),
+         {:ok, _job} <- PackageApproval.request(package_version) do
+      Logger.debug(
+        "packages import_from_upstream success name=#{inspect(name)} version=#{inspect(version)} tarball_url=#{inspect(url)} tarball_size=#{size} shasum=#{shasum}"
+      )
+
+      broadcast_catalog_updated()
+      {:ok, package_version}
+    else
+      %PackageVersion{} ->
+        Logger.debug(
+          "packages import_from_upstream duplicate name=#{inspect(name)} version=#{inspect(version)}"
+        )
+
+        {:error, :already_exists}
+
+      {:error, :not_found} ->
+        Logger.debug(
+          "packages import_from_upstream upstream package missing name=#{inspect(name)} version=#{inspect(version)}"
+        )
+
+        {:error, :upstream_not_found}
+
+      {:error, :version_not_found} ->
+        Logger.debug(
+          "packages import_from_upstream upstream version missing name=#{inspect(name)} version=#{inspect(version)}"
+        )
+
+        {:error, :upstream_version_not_found}
+
+      {:error, :tarball_not_found} ->
+        Logger.debug(
+          "packages import_from_upstream upstream tarball missing name=#{inspect(name)} version=#{inspect(version)}"
+        )
+
+        {:error, :upstream_tarball_not_found}
+
+      {:error, :invalid_payload} ->
+        Logger.debug(
+          "packages import_from_upstream invalid upstream payload name=#{inspect(name)} version=#{inspect(version)}"
+        )
+
+        {:error, :invalid_upstream_payload}
+
+      {:error, reason} ->
+        Logger.debug(
+          "packages import_from_upstream failed name=#{inspect(name)} version=#{inspect(version)} reason=#{inspect(reason)}"
+        )
+
+        {:error, reason}
     end
   end
 
@@ -296,7 +364,13 @@ defmodule Reki.Packages do
         description: manifest["description"],
         dist_tags: %{"latest" => version}
       },
-      on_conflict: [set: [latest: version, dist_tags: %{"latest" => version}]],
+      on_conflict: [
+        set: [
+          latest: version,
+          description: manifest["description"],
+          dist_tags: %{"latest" => version}
+        ]
+      ],
       conflict_target: :name,
       returning: true
     )
@@ -324,6 +398,8 @@ defmodule Reki.Packages do
   end
 
   defp store_tarball(name, version, tarball) do
+    tarball = IO.iodata_to_binary(tarball)
+
     shasum = :crypto.hash(:sha, tarball) |> Base.encode16(case: :lower)
 
     integrity =
@@ -333,9 +409,24 @@ defmodule Reki.Packages do
 
     size = byte_size(tarball)
 
+    Logger.debug(
+      "packages store_tarball prepared name=#{inspect(name)} version=#{inspect(version)} bytes=#{size}"
+    )
+
     case Reki.Storage.put(tarball_key(name, version), tarball) do
-      :ok -> {:ok, tarball_url(name, version), shasum, integrity, size}
-      error -> error
+      :ok ->
+        Logger.debug(
+          "packages store_tarball stored key=#{inspect(tarball_key(name, version))} url=#{inspect(tarball_url(name, version))}"
+        )
+
+        {:ok, tarball_url(name, version), shasum, integrity, size}
+
+      error ->
+        Logger.debug(
+          "packages store_tarball failed name=#{inspect(name)} version=#{inspect(version)} error=#{inspect(error)}"
+        )
+
+        error
     end
   end
 
@@ -386,9 +477,18 @@ defmodule Reki.Packages do
   defp validate_manifest(name, version, manifest) do
     with ^name <- manifest["name"],
          ^version <- manifest["version"] do
+      Logger.debug(
+        "packages validate_manifest ok name=#{inspect(name)} version=#{inspect(version)} manifest_dist_keys=#{inspect(if is_map(manifest["dist"]), do: Map.keys(manifest["dist"]) |> Enum.take(10), else: nil)}"
+      )
+
       :ok
     else
-      _ -> {:error, :invalid_payload}
+      other ->
+        Logger.debug(
+          "packages validate_manifest failed expected_name=#{inspect(name)} expected_version=#{inspect(version)} actual_name=#{inspect(manifest["name"])} actual_version=#{inspect(manifest["version"])} mismatch=#{inspect(other)}"
+        )
+
+        {:error, :invalid_payload}
     end
   end
 
@@ -419,5 +519,9 @@ defmodule Reki.Packages do
     name
     |> String.split("/")
     |> List.last()
+  end
+
+  defp upstream_registry_client do
+    Application.get_env(:reki, :upstream_registry_client, Reki.Packages.UpstreamRegistry)
   end
 end

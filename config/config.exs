@@ -14,6 +14,7 @@ config :reki,
 config :reki, Reki.Storage, root: Path.expand("../tmp/storage", __DIR__)
 
 config :reki, :package_approval_steps, []
+config :reki, :npm_registry_url, "https://registry.npmjs.org"
 
 config :reki,
        :package_approval_executor,

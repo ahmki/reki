@@ -14,6 +14,8 @@ defmodule Reki.PackagesTest do
   setup do
     File.rm_rf!(storage_root())
     put_package_approval_steps([])
+    put_upstream_registry_client(Reki.TestUpstreamRegistry)
+    put_upstream_registry_responses(%{})
     :ok
   end
 
@@ -267,6 +269,95 @@ defmodule Reki.PackagesTest do
     end
   end
 
+  describe "import_from_upstream/2" do
+    test "imports a mirrored version, stores integrity data, and queues approval" do
+      name = "@scope/mirror-widget"
+      version = "1.2.3"
+      {:ok, manifest, tarball} = upstream_release(name, version)
+
+      put_upstream_registry_responses(%{{name, version} => {:ok, manifest, tarball}})
+
+      assert {:ok, %PackageVersion{} = package_version} =
+               Packages.import_from_upstream(name, version)
+
+      assert package_version.validation_status == :pending
+      assert package_version.manifest["name"] == name
+      assert package_version.manifest["version"] == version
+      assert package_version.shasum == sha1(tarball)
+      assert package_version.integrity == sha512(tarball)
+      assert_enqueued(worker: Worker, args: %{"package_version_id" => package_version.id})
+
+      assert {:error, :not_found} = Packages.get_version(name, version)
+      assert {:error, :not_found} = Packages.get_tarball(name, "mirror-widget-1.2.3.tgz")
+      assert %ApprovalRun{status: :queued} = PackageApproval.latest_run(package_version.id)
+    end
+
+    test "mirrored versions become installable only after manual approval" do
+      name = "approved-mirror"
+      version = "4.5.6"
+      {:ok, manifest, tarball} = upstream_release(name, version)
+
+      put_upstream_registry_responses(%{{name, version} => {:ok, manifest, tarball}})
+
+      assert {:ok, %PackageVersion{} = package_version} =
+               Packages.import_from_upstream(name, version)
+
+      assert :ok = perform_job(Worker, %{"package_version_id" => package_version.id})
+      assert {:error, :not_found} = Packages.get_version(name, version)
+
+      assert {:ok, _approved} = Packages.approve_version(name, version)
+      assert {:ok, mirrored_manifest} = Packages.get_version(name, version)
+      assert mirrored_manifest["name"] == name
+      assert mirrored_manifest["version"] == version
+
+      assert {:ok, downloaded} = Packages.get_tarball(name, "approved-mirror-4.5.6.tgz")
+      assert downloaded == tarball
+    end
+
+    test "accepts upstream tarballs returned as iodata" do
+      name = "iodata-mirror"
+      version = "1.4.0"
+      {:ok, manifest, tarball} = upstream_release(name, version)
+
+      iodata_tarball = [
+        binary_part(tarball, 0, 16),
+        binary_part(tarball, 16, byte_size(tarball) - 16)
+      ]
+
+      put_upstream_registry_responses(%{{name, version} => {:ok, manifest, iodata_tarball}})
+
+      assert {:ok, %PackageVersion{} = package_version} =
+               Packages.import_from_upstream(name, version)
+
+      assert package_version.shasum == sha1(tarball)
+      assert package_version.integrity == sha512(tarball)
+    end
+
+    test "rejects duplicates before fetching upstream" do
+      name = "existing-mirror"
+      version = "1.0.0"
+
+      assert {:ok, _package_version} =
+               Packages.publish(name, publish_payload(name, version))
+
+      assert {:error, :already_exists} = Packages.import_from_upstream(name, version)
+    end
+
+    test "returns not found when upstream package is missing" do
+      assert {:error, :upstream_not_found} =
+               Packages.import_from_upstream("missing-package", "1.0.0")
+    end
+
+    test "returns not found when upstream version is missing" do
+      put_upstream_registry_responses(%{
+        {"missing-version", "9.9.9"} => {:error, :version_not_found}
+      })
+
+      assert {:error, :upstream_version_not_found} =
+               Packages.import_from_upstream("missing-version", "9.9.9")
+    end
+  end
+
   defp storage_root do
     Application.fetch_env!(:reki, Reki.Storage)
     |> Keyword.fetch!(:root)
@@ -277,6 +368,21 @@ defmodule Reki.PackagesTest do
     Application.put_env(:reki, :package_approval_steps, steps)
     on_exit(fn -> Application.put_env(:reki, :package_approval_steps, previous) end)
   end
+
+  defp put_upstream_registry_client(client) do
+    previous = Application.get_env(:reki, :upstream_registry_client)
+    Application.put_env(:reki, :upstream_registry_client, client)
+    on_exit(fn -> restore_env(:upstream_registry_client, previous) end)
+  end
+
+  defp put_upstream_registry_responses(responses) do
+    previous = Application.get_env(:reki, :test_upstream_registry_responses)
+    Application.put_env(:reki, :test_upstream_registry_responses, responses)
+    on_exit(fn -> restore_env(:test_upstream_registry_responses, previous) end)
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:reki, key)
+  defp restore_env(key, value), do: Application.put_env(:reki, key, value)
 
   defp sha1(data) do
     :crypto.hash(:sha, data)

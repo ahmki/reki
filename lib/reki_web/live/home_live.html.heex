@@ -17,22 +17,83 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3 sm:min-w-[28rem]">
-        <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
-          <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Packages</p>
-          <p class="mt-3 text-3xl font-semibold text-slate-950">{@stats.package_count}</p>
-        </div>
-        <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
-          <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Installable</p>
-          <p class="mt-3 text-3xl font-semibold text-emerald-700">{@stats.approved_count}</p>
-        </div>
-        <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
-          <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Pending</p>
-          <p class="mt-3 text-3xl font-semibold text-amber-700">{@stats.pending_count}</p>
-        </div>
-        <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
-          <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Blocked</p>
-          <p class="mt-3 text-3xl font-semibold text-rose-700">{@stats.blocked_count}</p>
+      <div class="w-full space-y-4 lg:max-w-[32rem]">
+        <.form
+          for={@import_form}
+          id="package-import-form"
+          phx-submit="import_package"
+          class="rounded-[1.75rem] border border-white/85 bg-white/88 p-5 shadow-sm backdrop-blur"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-orange-700">
+                Mirror from npm
+              </p>
+              <h2 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">
+                Import an exact package version for approval
+              </h2>
+              <p class="mt-2 text-sm leading-6 text-slate-600">
+                Pull a tarball from npm into local storage, then run the approval pipeline before
+                it becomes installable from this registry.
+              </p>
+            </div>
+            <div class="hidden rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 sm:inline-flex">
+              Admin action
+            </div>
+          </div>
+
+          <div class="mt-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
+            <.input
+              field={@import_form[:name]}
+              id="package-import-name"
+              type="text"
+              label="Package name"
+              placeholder="@scope/widget"
+              class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 shadow-sm transition focus:border-orange-400 focus:outline-none focus:ring-4 focus:ring-orange-100"
+            />
+            <.input
+              field={@import_form[:version]}
+              id="package-import-version"
+              type="text"
+              label="Exact version"
+              placeholder="1.2.3"
+              class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 shadow-sm transition focus:border-orange-400 focus:outline-none focus:ring-4 focus:ring-orange-100"
+            />
+          </div>
+
+          <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Approval is queued automatically after import.
+            </p>
+            <button
+              id="package-import-submit"
+              type="submit"
+              class="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 phx-submit-loading:cursor-wait phx-submit-loading:opacity-80"
+            >
+              Mirror package <.icon name="hero-arrow-down-tray" class="size-4" />
+            </button>
+          </div>
+        </.form>
+
+        <div class="grid grid-cols-2 gap-3 sm:min-w-[28rem]">
+          <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
+            <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Packages</p>
+            <p class="mt-3 text-3xl font-semibold text-slate-950">{@stats.package_count}</p>
+          </div>
+          <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
+            <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+              Installable
+            </p>
+            <p class="mt-3 text-3xl font-semibold text-emerald-700">{@stats.approved_count}</p>
+          </div>
+          <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
+            <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Pending</p>
+            <p class="mt-3 text-3xl font-semibold text-amber-700">{@stats.pending_count}</p>
+          </div>
+          <div class="rounded-2xl border border-white/80 bg-white/85 p-4 shadow-sm">
+            <p class="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Blocked</p>
+            <p class="mt-3 text-3xl font-semibold text-rose-700">{@stats.blocked_count}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -60,7 +121,8 @@
         <div class="space-y-2">
           <h3 class="text-xl font-semibold text-slate-950">No packages published yet</h3>
           <p class="text-sm leading-6 text-slate-600">
-            As packages are published, they will appear here with approval status and release counts.
+            Mirror a package from npm above, or publish directly to this registry, and it will
+            appear here with approval status and release counts.
           </p>
         </div>
       </div>

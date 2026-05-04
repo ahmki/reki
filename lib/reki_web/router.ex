@@ -18,6 +18,7 @@ defmodule RekiWeb.Router do
     pipe_through :api
 
     get "/-/ping", PackageController, :ping
+    post "/imports", PackageImportController, :create
     get "/:name", PackageController, :show
     get "/:name/:version", PackageController, :show_version
     get "/:name/-/:filename", PackageController, :download_tarball

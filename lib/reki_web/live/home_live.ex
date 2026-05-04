@@ -12,12 +12,43 @@ defmodule RekiWeb.HomeLive do
     {:ok,
      socket
      |> assign(:current_scope, nil)
+     |> assign_import_form()
      |> load_catalog()}
   end
 
   @impl true
   def handle_info(:catalog_updated, socket) do
     {:noreply, load_catalog(socket)}
+  end
+
+  @impl true
+  def handle_event("import_package", %{"import" => params}, socket) do
+    name = String.trim(params["name"] || "")
+    version = String.trim(params["version"] || "")
+
+    case validate_import_params(name, version) do
+      :ok ->
+        case Packages.import_from_upstream(name, version) do
+          {:ok, _package_version} ->
+            {:noreply,
+             socket
+             |> put_flash(:info, "Imported #{name}@#{version} and queued approval.")
+             |> assign_import_form()
+             |> load_catalog()}
+
+          {:error, reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, import_error_message(name, version, reason))
+             |> assign_import_form(%{"name" => name, "version" => version})}
+        end
+
+      {:error, message} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, message)
+         |> assign_import_form(%{"name" => name, "version" => version})}
+    end
   end
 
   def package_status_class(package) do
@@ -98,6 +129,10 @@ defmodule RekiWeb.HomeLive do
 
   def encoded_package_path(name), do: "/packages/#{URI.encode(name)}"
 
+  def import_form_defaults do
+    %{"name" => "", "version" => ""}
+  end
+
   defp load_catalog(socket) do
     packages = Packages.list_packages_for_catalog()
 
@@ -112,4 +147,34 @@ defmodule RekiWeb.HomeLive do
     |> assign(:stats, stats)
     |> stream(:packages, packages, reset: true)
   end
+
+  defp assign_import_form(socket, params \\ import_form_defaults()) do
+    assign(socket, :import_form, to_form(params, as: :import))
+  end
+
+  defp validate_import_params(name, version) do
+    cond do
+      name == "" -> {:error, "Package name is required."}
+      version == "" -> {:error, "Exact version is required."}
+      true -> :ok
+    end
+  end
+
+  defp import_error_message(name, version, :already_exists),
+    do: "Package version already exists: #{name}@#{version}."
+
+  defp import_error_message(name, _version, :upstream_not_found),
+    do: "Upstream package not found: #{name}."
+
+  defp import_error_message(name, version, :upstream_version_not_found),
+    do: "Upstream version not found: #{name}@#{version}."
+
+  defp import_error_message(_name, _version, :invalid_upstream_payload),
+    do: "Upstream registry returned an invalid package payload."
+
+  defp import_error_message(_name, _version, :upstream_tarball_not_found),
+    do: "Upstream tarball could not be downloaded."
+
+  defp import_error_message(_name, _version, reason),
+    do: "Failed to import package: #{inspect(reason)}"
 end

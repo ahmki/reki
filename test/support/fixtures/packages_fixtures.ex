@@ -73,6 +73,30 @@ defmodule Reki.PackagesFixtures do
     "#{name |> String.split("/") |> List.last()}-#{version}.tgz"
   end
 
+  def upstream_release(name, version, attrs \\ %{}) do
+    manifest =
+      Map.merge(
+        %{
+          "name" => name,
+          "version" => version,
+          "description" => "Mirrored test package",
+          "dist" => %{
+            "tarball" =>
+              "https://registry.npmjs.org/#{URI.encode(name)}/-/#{tarball_filename(name, version)}"
+          }
+        },
+        attrs
+      )
+
+    tarball =
+      package_tarball(%{
+        "package/package.json" => Jason.encode!(%{"name" => name, "version" => version}),
+        "package/index.js" => "module.exports = #{inspect(version)};\n"
+      })
+
+    {:ok, manifest, tarball}
+  end
+
   defp tarball_from_fixture(files) when is_map(files), do: package_tarball(files)
   defp tarball_from_fixture(tarball) when is_binary(tarball), do: tarball
 
