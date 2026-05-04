@@ -63,7 +63,6 @@ defmodule RekiWeb.Layouts do
             >
               API health
             </a>
-            <.theme_toggle />
           </div>
         </div>
       </header>
@@ -118,43 +117,6 @@ defmodule RekiWeb.Layouts do
         {gettext("Attempting to reconnect")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
-    </div>
-    """
-  end
-
-  @doc """
-  Provides dark vs light theme toggle based on themes defined in app.css.
-
-  See <head> in root.html.heex which applies the theme before page load.
-  """
-  def theme_toggle(assigns) do
-    ~H"""
-    <div class="relative flex flex-row items-center rounded-full border border-slate-200 bg-slate-100 p-1">
-      <div class="absolute left-1 h-9 w-9 rounded-full bg-white shadow-sm transition-[transform] [[data-theme=light]_&]:translate-x-10 [[data-theme=dark]_&]:translate-x-20" />
-
-      <button
-        class="relative z-10 flex w-10 cursor-pointer justify-center p-2 text-slate-500 transition hover:text-slate-900"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="system"
-      >
-        <.icon name="hero-computer-desktop" class="size-4" />
-      </button>
-
-      <button
-        class="relative z-10 flex w-10 cursor-pointer justify-center p-2 text-slate-500 transition hover:text-slate-900"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="light"
-      >
-        <.icon name="hero-sun" class="size-4" />
-      </button>
-
-      <button
-        class="relative z-10 flex w-10 cursor-pointer justify-center p-2 text-slate-500 transition hover:text-slate-900"
-        phx-click={JS.dispatch("phx:set-theme")}
-        data-phx-theme="dark"
-      >
-        <.icon name="hero-moon" class="size-4" />
-      </button>
     </div>
     """
   end
